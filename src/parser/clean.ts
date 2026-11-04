@@ -27,9 +27,29 @@ export function normalizeSpaces(s: string): string {
   return s.replace(SPACES_RE, ' ');
 }
 
-/** Full cleanup for user-visible text. */
+const NEEDS_CLEAN_RE = /[\u00A0\u2000-\u200F\u202A-\u202F\u205F\u2066-\u2069\u3000\uFEFF]/;
+
+/** Full cleanup for user-visible text (fast path when there is nothing to clean). */
 export function cleanText(s: string): string {
+  if (!NEEDS_CLEAN_RE.test(s)) return s;
   return normalizeSpaces(stripInvisible(s));
+}
+
+/**
+ * Lookup key for text that has already been through cleanText: lowercase,
+ * trimmed, single spaces, no trailing dots / exclamation marks.
+ */
+export function fastKey(s: string): string {
+  let k = s.trim().toLowerCase();
+  if (k.indexOf('  ') !== -1 || k.indexOf('\t') !== -1) k = k.replace(/\s+/g, ' ');
+  let end = k.length;
+  while (end > 0) {
+    const c = k.charCodeAt(end - 1);
+    if (c === 46 || c === 33 || c === 0x3002) end--;
+    else break;
+  }
+  if (end < k.length) k = k.slice(0, end).trimEnd();
+  return k;
 }
 
 /**

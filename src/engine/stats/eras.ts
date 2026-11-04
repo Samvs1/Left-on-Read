@@ -7,7 +7,7 @@ import type { Ctx } from '../context';
 import { T } from '../prepare';
 import type { Era, EraKind } from '../types';
 import { DAY, logOddsZ, median, monthOf, monthStart, weekOfDay, weekStart, zeros } from '../util';
-import type { ContentResult } from './content';
+import { TokenCounts, type ContentResult } from './content';
 
 interface Bucket {
   start: number;
@@ -161,7 +161,7 @@ export function computeEras(ctx: Ctx, c: ContentResult): Era[] {
     return 0;
   };
   const share = eras.map(() => zeros(np));
-  const tokens = eras.map(() => new Map<number, number>());
+  const tokens = new TokenCounts(nE, P.vocab.length);
   const emojis = eras.map(() => new Map<number, number>());
   const tokTotal = zeros(nE);
   const emoTotal = zeros(nE);
@@ -173,10 +173,20 @@ export function computeEras(ctx: Ctx, c: ContentResult): Era[] {
     while (e + 1 < nE && tl[k]! >= eras[e + 1]!.start) e++;
     const i = idx[k]!;
     share[e]![au[k]!]!++;
-    for (let t = P.tokStart[i]!; t < P.tokStart[i + 1]!; t++) {
-      const id = P.tokens[t]!;
-      tokens[e]!.set(id, (tokens[e]!.get(id) ?? 0) + 1);
-      tokTotal[e]!++;
+    const t0 = P.tokStart[i]!;
+    const t1 = P.tokStart[i + 1]!;
+    if (t1 > t0) {
+      if (tokens.dense) {
+        const arr = tokens.dense[e]!;
+        for (let t = t0; t < t1; t++) arr[P.tokens[t]!]!++;
+      } else {
+        const mp = tokens.sparse![e]!;
+        for (let t = t0; t < t1; t++) {
+          const id = P.tokens[t]!;
+          mp.set(id, (mp.get(id) ?? 0) + 1);
+        }
+      }
+      tokTotal[e]! += t1 - t0;
     }
     for (let q = P.emoStart[i]!; q < P.emoStart[i + 1]!; q++) {
       const id = P.emoIds[q]!;
@@ -210,13 +220,13 @@ export function computeEras(ctx: Ctx, c: ContentResult): Era[] {
     // Distinctive words for the era
     const ni = tokTotal[ei]!;
     const words: { id: number; z: number }[] = [];
-    for (const [id, yi] of tokens[ei]!) {
-      if (yi < 3 || ctx.isStop(id) || P.vocab[id]!.length < 3) continue;
+    tokens.forEach(ei, (id, yi) => {
+      if (yi < 3 || ctx.isStop(id) || P.vocab[id]!.length < 3) return;
       const total = c.tokenTotals[id]!;
       const aw = (300 * total) / Math.max(1, N);
       const z = nE > 1 ? logOddsZ(yi, ni, total - yi, N - ni, aw, 300) : yi;
       words.push({ id, z });
-    }
+    });
     words.sort((p, q) => q.z - p.z);
     // Signature emoji (fall back to most used)
     let topEmoji: string | null = null;

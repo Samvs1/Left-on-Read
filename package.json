@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "node --experimental-strip-types scripts/bench.ts",
+    "bench": "rolldown scripts/bench.ts --format esm --platform node --file node_modules/.cache/bench.mjs --log-level silent && node node_modules/.cache/bench.mjs",
     "verify:network": "node scripts/verify-no-network.mjs",
     "lighthouse": "node scripts/lighthouse.mjs"
   },

@@ -22,6 +22,59 @@ import { MEDIA_KINDS } from '../types';
 import { DAY, inc, logOddsZ, monthOf, monthStart, topK, zeros } from '../util';
 import { excerptAt } from './common';
 
+/**
+ * Per-person token counts. Dense typed arrays when people × vocabulary is
+ * small enough (fast increments, no hashing), sparse Maps otherwise.
+ */
+export class TokenCounts {
+  readonly dense: Uint32Array[] | null;
+  readonly sparse: Map<number, number>[] | null;
+  constructor(np: number, V: number) {
+    if (np * V <= 6_000_000) {
+      this.dense = Array.from({ length: np }, () => new Uint32Array(V));
+      this.sparse = null;
+    } else {
+      this.dense = null;
+      this.sparse = Array.from({ length: np }, () => new Map<number, number>());
+    }
+  }
+  get(a: number, id: number): number {
+    return this.dense ? this.dense[a]![id]! : (this.sparse![a]!.get(id) ?? 0);
+  }
+  /** Calls fn for every token with a non-zero count. */
+  forEach(a: number, fn: (id: number, count: number) => void): void {
+    if (this.dense) {
+      const arr = this.dense[a]!;
+      for (let id = 0; id < arr.length; id++) if (arr[id]! > 0) fn(id, arr[id]!);
+    } else {
+      for (const [id, c] of this.sparse![a]!) fn(id, c);
+    }
+  }
+  size(a: number): number {
+    if (!this.dense) return this.sparse![a]!.size;
+    let n = 0;
+    const arr = this.dense[a]!;
+    for (let id = 0; id < arr.length; id++) if (arr[id]! > 0) n++;
+    return n;
+  }
+  top(a: number, k: number, filter: (id: number) => boolean): { key: number; count: number }[] {
+    const out: { key: number; count: number }[] = [];
+    let min = 0;
+    this.forEach(a, (id, count) => {
+      if (out.length >= k && count < min) return;
+      if (!filter(id)) return;
+      out.push({ key: id, count });
+      if (out.length > k * 4) {
+        out.sort((x, y) => y.count - x.count || x.key - y.key);
+        out.length = k;
+        min = out[k - 1]!.count;
+      }
+    });
+    out.sort((x, y) => y.count - x.count || x.key - y.key);
+    return out.slice(0, k);
+  }
+}
+
 export interface ContentPerPerson {
   messages: number[];
   textMessages: number[];
@@ -60,7 +113,7 @@ export interface ContentPerPerson {
   emojis: number[];
   emojiCounts: Map<number, number>[];
   skinTones: number[][];
-  tokenCounts: Map<number, number>[];
+  tokenCounts: TokenCounts;
   sentimentSum: number[];
   positive: number[];
   negative: number[];
@@ -96,7 +149,7 @@ export function collectContent(ctx: Ctx): ContentResult {
     links: z(), domains: Array.from({ length: np }, () => new Map()),
     deleted: z(), edited: z(), calls: z(), missed: z(), swears: z(),
     emojis: z(), emojiCounts: Array.from({ length: np }, () => new Map()), skinTones: Array.from({ length: np }, () => zeros(6)),
-    tokenCounts: Array.from({ length: np }, () => new Map()),
+    tokenCounts: new TokenCounts(np, P.vocab.length),
     sentimentSum: z(), positive: z(), negative: z(),
   };
   const V = P.vocab.length;
@@ -165,11 +218,13 @@ export function collectContent(ctx: Ctx): ContentResult {
     const t0 = P.tokStart[i]!;
     const t1 = P.tokStart[i + 1]!;
     if (t1 > t0) {
-      const tc = pp.tokenCounts[a]!;
+      const dense = pp.tokenCounts.dense ? pp.tokenCounts.dense[a]! : null;
+      const tc = pp.tokenCounts.sparse ? pp.tokenCounts.sparse[a]! : null;
       for (let t = t0; t < t1; t++) {
         const id = P.tokens[t]!;
         tokenTotals[id]!++;
-        tc.set(id, (tc.get(id) ?? 0) + 1);
+        if (dense) dense[id]!++;
+        else tc!.set(id, (tc!.get(id) ?? 0) + 1);
         const lk = P.vocabLaugh[id]!;
         if (lk >= 0) inc(laughKindCounts, P.laughKinds[lk]!);
         if (P.vocabSwear[id]) inc(swearTokens, id);
@@ -291,121 +346,130 @@ export function computeWords(ctx: Ctx, c: ContentResult): {
   const topWords: CountedByPerson[] = top.map(({ key, count }) => ({
     key: P.vocab[key]!,
     count,
-    byPerson: c.pp.tokenCounts.map((tc) => tc.get(key) ?? 0),
+    byPerson: Array.from({ length: np }, (_, a) => c.pp.tokenCounts.get(a, key)),
   }));
 
-  const topWordsPP: Counted[][] = c.pp.tokenCounts.map((tc) =>
-    topK(tc, 15, (id) => !ctx.isStop(id)).map(({ key, count }) => ({ key: P.vocab[key]!, count })),
+  const topWordsPP: Counted[][] = Array.from({ length: np }, (_, a) =>
+    c.pp.tokenCounts.top(a, 15, (id) => !ctx.isStop(id)).map(({ key, count }) => ({ key: P.vocab[key]!, count })),
   );
-  const vocabularyPP = c.pp.tokenCounts.map((tc) => tc.size);
+  const vocabularyPP = Array.from({ length: np }, (_, a) => c.pp.tokenCounts.size(a));
 
   // Signature words (log-odds, informative Dirichlet prior)
   const PRIOR = 500;
-  const signaturePP = c.pp.tokenCounts.map((tc, a) => {
+  const signaturePP = Array.from({ length: np }, (_, a) => {
     const ni = c.pp.words[a]!;
     if (ni < 200 || np < 2) return [];
     const nj = N - ni;
     const out: { key: string; score: number; count: number }[] = [];
-    for (const [id, yi] of tc) {
-      if (yi < 3 || ctx.isStop(id)) continue;
+    c.pp.tokenCounts.forEach(a, (id, yi) => {
+      if (yi < 3 || ctx.isStop(id)) return;
       const total = totals[id]!;
-      if (total < 5) continue;
+      if (total < 5) return;
       const aw = (PRIOR * total) / N;
       const z = logOddsZ(yi, ni, total - yi, nj, aw, PRIOR);
       if (z > 1.96) out.push({ key: P.vocab[id]!, score: z, count: yi });
-    }
+    });
     out.sort((x, y) => y.score - x.score);
     return out.slice(0, 10);
   });
 
-  // N-grams
-  const canUseTrigram = V < 200_000;
+  // N-grams. Tokens are re-indexed by frequency rank so keys stay small integers
+  // (V8 small-int Map keys avoid boxing): bigrams over the top 32,767 tokens,
+  // trigrams over the top 1,023. Rarer words cannot form frequent n-grams anyway.
+  const order = new Int32Array(V);
+  for (let v = 0; v < V; v++) order[v] = v;
+  order.sort((x, y) => totals[y]! - totals[x]! || x - y);
+  const rank = new Int32Array(V).fill(-1);
+  let ranked = 0;
+  for (let r = 0; r < V; r++) {
+    const id = order[r]!;
+    if (totals[id] === 0) break;
+    const ok = P.vocabLaugh[id]! < 0 && !/^\d+$/.test(P.vocab[id]!);
+    if (ok) rank[id] = ranked++;
+  }
+  const B = 32768;
+  const T3 = 1024;
+  const idOfRank = new Int32Array(Math.max(1, ranked));
+  for (let v = 0; v < V; v++) if (rank[v]! >= 0) idOfRank[rank[v]!] = v;
+  const isContent = new Uint8Array(V);
+  for (let v = 0; v < V; v++) isContent[v] = rank[v]! >= 0 && !ctx.isStop(v) ? 1 : 0;
   const bigrams = new Map<number, number>();
   const trigrams = new Map<number, number>();
-  const okTok = (id: number) => P.vocabLaugh[id]! < 0 && !/^\d+$/.test(P.vocab[id]!);
-  const okTokCache = new Uint8Array(V);
-  for (let v = 0; v < V; v++) okTokCache[v] = okTok(v) ? 1 : 0;
-  const stopCache = new Uint8Array(V);
-  for (let v = 0; v < V; v++) stopCache[v] = ctx.isStop(v) && P.vocabLaugh[v]! < 0 && !/^\d+$/.test(P.vocab[v]!) ? 1 : 0;
-  const content = (id: number) => okTokCache[id] === 1 && stopCache[id] === 0;
   for (let k = 0; k < m; k++) {
     const i = idx[k]!;
     const t0 = P.tokStart[i]!;
     const t1 = P.tokStart[i + 1]!;
     for (let t = t0; t + 1 < t1; t++) {
-      const x = P.tokens[t]!;
-      const y = P.tokens[t + 1]!;
-      if (!okTokCache[x] || !okTokCache[y] || x === y) continue;
-      const key = x * V + y;
+      const rx = rank[P.tokens[t]!]!;
+      const ry = rank[P.tokens[t + 1]!]!;
+      if (rx < 0 || ry < 0 || rx === ry || rx >= B || ry >= B) continue;
+      const key = rx * B + ry;
       bigrams.set(key, (bigrams.get(key) ?? 0) + 1);
-      if (canUseTrigram && t + 2 < t1) {
-        const zt = P.tokens[t + 2]!;
-        if (okTokCache[zt]) {
-          const key3 = key * V + zt;
-          trigrams.set(key3, (trigrams.get(key3) ?? 0) + 1);
+      if (t + 2 < t1 && rx < T3 && ry < T3) {
+        const rz = rank[P.tokens[t + 2]!]!;
+        if (rz >= 0 && rz < T3) {
+          const k3 = (rx * T3 + ry) * T3 + rz;
+          trigrams.set(k3, (trigrams.get(k3) ?? 0) + 1);
         }
       }
     }
   }
-  const bigramLabel = (key: number) => `${P.vocab[Math.floor(key / V)]!} ${P.vocab[key % V]!}`;
-  const trigramLabel = (key: number) => {
-    const zt = key % V;
-    const xy = Math.floor(key / V);
-    return `${P.vocab[Math.floor(xy / V)]!} ${P.vocab[xy % V]!} ${P.vocab[zt]!}`;
-  };
-  // A bigram must contain at least one non-stopword; prefer those with both
-  const bigramFilter = (key: number, count: number) => count >= 2 && content(Math.floor(key / V)) && content(key % V);
-  const topBigramsK = topK(bigrams, 25, (key, cnt) => bigramFilter(key, cnt));
+  const bx = (key: number) => idOfRank[Math.floor(key / B)]!;
+  const by = (key: number) => idOfRank[key % B]!;
+  const tx = (key: number) => idOfRank[Math.floor(key / (T3 * T3))]!;
+  const ty = (key: number) => idOfRank[Math.floor(key / T3) % T3]!;
+  const tz = (key: number) => idOfRank[key % T3]!;
+  const bigramLabel = (key: number) => `${P.vocab[bx(key)]!} ${P.vocab[by(key)]!}`;
+  const trigramLabel = (key: number) => `${P.vocab[tx(key)]!} ${P.vocab[ty(key)]!} ${P.vocab[tz(key)]!}`;
+  const bothContent = (key: number) => isContent[bx(key)] === 1 && isContent[by(key)] === 1;
+  const anyContent2 = (key: number) => isContent[bx(key)] === 1 || isContent[by(key)] === 1;
+  const anyContent3 = (key: number) => isContent[tx(key)] === 1 || isContent[ty(key)] === 1 || isContent[tz(key)] === 1;
+  const topBigramsK = topK(bigrams, 25, (key, cnt) => cnt >= 2 && bothContent(key));
   if (topBigramsK.length < 10) {
-    topBigramsK.push(
-      ...topK(bigrams, 25 - topBigramsK.length, (key, cnt) => cnt >= 2 && !bigramFilter(key, cnt) && (content(Math.floor(key / V)) || content(key % V))),
-    );
+    topBigramsK.push(...topK(bigrams, 25 - topBigramsK.length, (key, cnt) => cnt >= 2 && !bothContent(key) && anyContent2(key)));
   }
-  const trigramHasContent = (key: number) => {
-    const zt = key % V;
-    const xy = Math.floor(key / V);
-    return content(Math.floor(xy / V)) || content(xy % V) || content(zt);
-  };
-  const topTrigramsK = topK(trigrams, 25, (key, cnt) => cnt >= 2 && trigramHasContent(key));
+  const topTrigramsK = topK(trigrams, 25, (key, cnt) => cnt >= 2 && anyContent3(key));
 
-  // Candidate n-grams for catchphrases + per-person counts for top lists
-  const candidates = new Map<number, { label: string; n: number; byPerson: number[] }>();
-  const addCand = (key: number, n: number, label: string) => {
-    const tag = n === 2 ? key * 2 : key * 2 + 1; // keep bigram/trigram keys apart
-    if (!candidates.has(tag)) candidates.set(tag, { label, n, byPerson: zeros(np) });
-  };
-  for (const { key } of topK(bigrams, 1500, (_k, cnt) => cnt >= 3)) addCand(key, 2, bigramLabel(key));
-  if (canUseTrigram) for (const { key } of topK(trigrams, 1500, (_k, cnt) => cnt >= 3)) addCand(key, 3, trigramLabel(key));
-  for (const { key } of topBigramsK) addCand(key, 2, bigramLabel(key));
-  for (const { key } of topTrigramsK) addCand(key, 3, trigramLabel(key));
-  if (candidates.size > 0) {
+  // Candidate n-grams for catchphrases + per-person counts for the top lists
+  const cand2 = new Map<number, { label: string; n: number; byPerson: number[] }>();
+  const cand3 = new Map<number, { label: string; n: number; byPerson: number[] }>();
+  for (const { key } of topK(bigrams, 1500, (_k, cnt) => cnt >= 3)) cand2.set(key, { label: bigramLabel(key), n: 2, byPerson: zeros(np) });
+  for (const { key } of topK(trigrams, 1500, (_k, cnt) => cnt >= 3)) cand3.set(key, { label: trigramLabel(key), n: 3, byPerson: zeros(np) });
+  for (const { key } of topBigramsK) if (!cand2.has(key)) cand2.set(key, { label: bigramLabel(key), n: 2, byPerson: zeros(np) });
+  for (const { key } of topTrigramsK) if (!cand3.has(key)) cand3.set(key, { label: trigramLabel(key), n: 3, byPerson: zeros(np) });
+  if (cand2.size + cand3.size > 0) {
     for (let k = 0; k < m; k++) {
       const i = idx[k]!;
       const a = au[k]!;
       const t0 = P.tokStart[i]!;
       const t1 = P.tokStart[i + 1]!;
       for (let t = t0; t + 1 < t1; t++) {
-        const x = P.tokens[t]!;
-        const y = P.tokens[t + 1]!;
-        const c2 = candidates.get((x * V + y) * 2);
+        const rx = rank[P.tokens[t]!]!;
+        const ry = rank[P.tokens[t + 1]!]!;
+        if (rx < 0 || ry < 0 || rx >= B || ry >= B) continue;
+        const c2 = cand2.get(rx * B + ry);
         if (c2) c2.byPerson[a]!++;
-        if (canUseTrigram && t + 2 < t1) {
-          const c3 = candidates.get(((x * V + y) * V + P.tokens[t + 2]!) * 2 + 1);
-          if (c3) c3.byPerson[a]!++;
+        if (t + 2 < t1 && rx < T3 && ry < T3) {
+          const rz = rank[P.tokens[t + 2]!]!;
+          if (rz >= 0 && rz < T3) {
+            const c3 = cand3.get((rx * T3 + ry) * T3 + rz);
+            if (c3) c3.byPerson[a]!++;
+          }
         }
       }
     }
   }
   const toCounted = (key: number, n: number): CountedByPerson => {
-    const cand = candidates.get(n === 2 ? key * 2 : key * 2 + 1)!;
+    const cand = (n === 2 ? cand2 : cand3).get(key)!;
     return { key: cand.label, count: cand.byPerson.reduce((x, y) => x + y, 0), byPerson: cand.byPerson };
   };
+  const candidates = [...cand2.values(), ...cand3.values()];
 
   const shares = c.pp.messages.map((x) => x / Math.max(1, m));
   const catchphrasesPP = Array.from({ length: np }, (_, a) => {
     if (np < 2) return [];
     const list: { key: string; count: number; share: number; score: number }[] = [];
-    for (const cand of candidates.values()) {
+    for (const cand of candidates) {
       const total = cand.byPerson.reduce((x, y) => x + y, 0);
       const mine = cand.byPerson[a]!;
       if (mine < 3 || total === 0) continue;

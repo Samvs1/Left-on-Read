@@ -29,18 +29,35 @@ export function computeStats(P: Prepared, settingsIn: Partial<Settings> = {}): C
   const { m, np } = ctx;
   const isGroup = P.isGroup || np > 2;
 
+  const timings: Record<string, number> = {};
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  let tick = now();
+  const lap = (label: string) => {
+    const t = now();
+    timings[label] = t - tick;
+    tick = t;
+  };
+  lap('context');
   const { time, perPerson: tpp } = computeTime(ctx);
+  lap('time');
   const { dynamics, perPerson: dpp } = computeDynamics(ctx);
+  lap('dynamics');
   const content = collectContent(ctx);
   const cpp = content.pp;
+  lap('content');
   const words = computeWords(ctx, content);
+  lap('words');
   const emojis = computeEmojis(ctx, content);
   const laughter = computeLaughter(ctx, content);
   const media = computeMedia(ctx, content);
+  lap('emoji/laugh/media');
   const sentiment = computeSentiment(ctx, content);
+  lap('sentiment');
   const eras = computeEras(ctx, content);
+  lap('eras');
   const richness = lexicalRichness(ctx);
   const mn = morningAndNight(ctx);
+  lap('richness');
 
   const people: PersonStats[] = P.people.map((name, a) => {
     const msgs = cpp.messages[a]!;
@@ -136,10 +153,12 @@ export function computeStats(P: Prepared, settingsIn: Partial<Settings> = {}): C
     };
   });
 
+  lap('people');
   const effort = !isGroup && np === 2 ? effortBalance(people) : null;
   const group = isGroup ? computeGroup(ctx, dpp, cpp) : null;
   const duo = !isGroup && np === 2 ? computeDuo(ctx, cpp, mn) : null;
   const awards = computeAwards(people, isGroup);
+  lap('group/duo/awards');
 
   // Optional: count system messages in totals
   let totalMessages = m;
@@ -212,6 +231,7 @@ export function computeStats(P: Prepared, settingsIn: Partial<Settings> = {}): C
     duo,
     awards,
     computeMs: t1 - t0,
+    timings,
   };
 }
 

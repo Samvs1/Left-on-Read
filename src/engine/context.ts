@@ -5,7 +5,7 @@
 import type { Prepared } from './prepare';
 import { T, isMediaCode } from './prepare';
 import type { Settings } from './types';
-import { DAY, HOUR, MINUTE, weekdayOfDay } from './util';
+import { DAY, HOUR, MINUTE, monthOf, weekdayOfDay } from './util';
 import { STOPWORDS } from './lexicon/stopwords';
 
 export interface Ctx {
@@ -23,6 +23,10 @@ export interface Ctx {
   wd: Uint8Array;
   /** Author per view position. */
   au: Int16Array;
+  /** Month offset (from firstMonth) per view position. */
+  mon: Int32Array;
+  firstMonth: number;
+  nMonths: number;
   /** Conversation id per view position. */
   conv: Int32Array;
   convStart: Int32Array;
@@ -84,6 +88,10 @@ export function buildContext(P: Prepared, s: Settings): Ctx {
   const wd = new Uint8Array(m);
   const au = new Int16Array(m);
   const conv = new Int32Array(m);
+  const mon = new Int32Array(m);
+  const firstMonth = m > 0 ? monthOf(Math.floor((P.ts[idx[0]!]! + shift) / DAY) * DAY) : 0;
+  let lastDayCached = -1;
+  let lastMonCached = 0;
   const counts = new Array<number>(np).fill(0);
   const gapMs = s.conversationGapMinutes * MINUTE;
   const cs: number[] = [];
@@ -101,6 +109,11 @@ export function buildContext(P: Prepared, s: Settings): Ctx {
     day[k] = d;
     hour[k] = Math.floor((t - d * DAY) / HOUR);
     wd[k] = weekdayOfDay(d);
+    if (d !== lastDayCached) {
+      lastDayCached = d;
+      lastMonCached = monthOf(d * DAY) - firstMonth;
+    }
+    mon[k] = lastMonCached;
     const a = P.author[i]!;
     au[k] = a;
     counts[a]!++;
@@ -158,6 +171,9 @@ export function buildContext(P: Prepared, s: Settings): Ctx {
     hour,
     wd,
     au,
+    mon,
+    firstMonth,
+    nMonths: m > 0 ? mon[m - 1]! + 1 : 0,
     conv,
     convStart: Int32Array.from(cs),
     convEnd: Int32Array.from(ce),

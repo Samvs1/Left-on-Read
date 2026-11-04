@@ -1,7 +1,7 @@
 import type { Ctx } from '../context';
 import { F } from '../prepare';
 import type { DynamicsStats, InterestTrend, ResponseBin } from '../types';
-import { DAY, HOUR, MINUTE, median, monthOf, monthStart, percentiles, zeros } from '../util';
+import { HOUR, MINUTE, median, monthStart, percentiles, zeros } from '../util';
 
 export const RESPONSE_BINS: ResponseBin[] = [
   { max: MINUTE, label: '<1m' },
@@ -237,32 +237,25 @@ function interestTrend(ctx: Ctx): InterestTrend {
   const { m, tl, au, convStart, nConv, turnStart, turnEnd, nTurns, conv } = ctx;
   const main = ctx.mainPeople;
   if (m === 0) return { months: [], initiationShare: main.map(() => []), medianResponse: main.map(() => []), messages: main.map(() => []) };
-  const first = monthOf(ctx.firstDay * DAY);
-  const nMonths = monthOf(ctx.lastDay * DAY) - first + 1;
+  const first = ctx.firstMonth;
+  const nMonths = ctx.nMonths;
   const pos = new Int32Array(ctx.np).fill(-1);
   main.forEach((p, i) => (pos[p] = i));
   const convs = zeros(nMonths);
   const inits = main.map(() => zeros(nMonths));
   const msgs = main.map(() => zeros(nMonths));
   const rts = main.map(() => Array.from({ length: nMonths }, () => [] as number[]));
-  // Month of each view position: compute incrementally (sorted)
-  const monthAt = (t: number) => monthOf(t) - first;
+  const mon = ctx.mon;
   for (let c = 0; c < nConv; c++) {
     const k = convStart[c]!;
-    const mo = monthAt(tl[k]!);
+    const mo = mon[k]!;
     convs[mo]!++;
     const p = pos[au[k]!]!;
     if (p >= 0) inits[p]![mo]!++;
   }
-  let curDayMonth = -1;
-  let curDay = -1;
   for (let k = 0; k < m; k++) {
-    if (ctx.day[k] !== curDay) {
-      curDay = ctx.day[k]!;
-      curDayMonth = monthAt(curDay * DAY);
-    }
     const p = pos[au[k]!]!;
-    if (p >= 0) msgs[p]![curDayMonth]!++;
+    if (p >= 0) msgs[p]![mon[k]!]!++;
   }
   for (let t = 1; t < nTurns; t++) {
     const k0 = turnStart[t]!;
@@ -270,7 +263,7 @@ function interestTrend(ctx: Ctx): InterestTrend {
     if (conv[pe] !== conv[k0]) continue;
     const p = pos[au[k0]!]!;
     if (p < 0) continue;
-    rts[p]![monthAt(tl[k0]!)]!.push(tl[k0]! - tl[pe]!);
+    rts[p]![mon[k0]!]!.push(tl[k0]! - tl[pe]!);
   }
   return {
     months: Array.from({ length: nMonths }, (_, i) => monthStart(first + i)),

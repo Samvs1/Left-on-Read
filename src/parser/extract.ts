@@ -6,9 +6,7 @@ const LINK_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
 const TRAILING_PUNCT_RE = /[.,!?;:'"»”’>]+$/;
 
 export function extractLinks(text: string): string[] {
-  if (text.indexOf('http') === -1 && text.indexOf('www.') === -1 && text.indexOf('HTTP') === -1 && text.indexOf('WWW.') === -1) {
-    return [];
-  }
+  if (text.indexOf('://') === -1 && text.indexOf('www.') === -1 && text.indexOf('WWW.') === -1) return [];
   const out: string[] = [];
   LINK_RE.lastIndex = 0;
   let m: RegExpExecArray | null;

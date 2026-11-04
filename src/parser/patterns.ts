@@ -7,7 +7,7 @@
  * Regexes only run after cheap substring guards.
  */
 import type { MessageMeta, MessageType, PollOption, SystemKind } from './types';
-import { normalizeForLookup } from './clean';
+import { fastKey, normalizeForLookup } from './clean';
 
 export interface ContentClass {
   type: MessageType;
@@ -61,6 +61,7 @@ const DELETED = [
   'bu mesajı sildiniz',
   'bu mesajı sildin',
 ];
+const DELETED_FIRST_CHARS = new Set([116, 100, 99, 101, 113]); // t d c e q
 const DELETED_PREFIXES = [
   'this message was deleted by',
   'dit bericht is verwijderd door',
@@ -267,6 +268,9 @@ const EDITED = new Set([
 const EDITED_TAIL_RE = /\s*<([^<>\n]{4,64})>\s*$/u;
 
 export function stripEdited(text: string): { text: string; edited: boolean } {
+  const last = text.charCodeAt(text.length - 1);
+  // Fast path: the marker always ends with '>' (possibly followed by whitespace)
+  if (last !== 62 && last !== 32 && last !== 10 && last !== 9) return { text, edited: false };
   const t = text.trimEnd();
   if (t.length < 6 || !t.endsWith('>')) return { text, edited: false };
   const m = EDITED_TAIL_RE.exec(t);
@@ -322,6 +326,7 @@ const PENDING = [
 ];
 for (const p of PENDING) PLACEHOLDERS.set(p, { type: 'system', text: '', meta: { systemKind: 'pending' } });
 
+const OMISSION_LAST = new Set(OMISSIONS.map((o) => o.slice(o.lastIndexOf(' ') + 1)));
 const OMISSION_HINT_RE = /omit|weggel|ausgel|ausgeschl|entfernt|absent|omis|manqu|retir|oculta|oculto|omess|esclus|dahil|atland|eksik/u;
 const DOC_OMITTED_SUFFIXES = OMISSIONS.flatMap((om) =>
   ['document', 'documento', 'dokument', 'belge', 'fichier', 'bestand', 'datei'].map((n) => ` ${n} ${om}`),
@@ -339,7 +344,8 @@ export function classifyContent(text: string): ContentClass | null {
   const nl = text.indexOf('\n');
   const first = nl === -1 ? text : text.slice(0, nl);
   if (first.length > 160) return null;
-  const key = normalizeForLookup(first);
+  // Input has already been through cleanText(), so no invisible characters remain.
+  const key = fastKey(first);
   if (key.length === 0) return null;
   const rest = nl === -1 ? '' : text.slice(nl + 1).trim();
 
@@ -369,7 +375,8 @@ export function classifyContent(text: string): ContentClass | null {
   }
 
   // "Report.pdf • 3 pages document omitted"
-  if (key.length < 140 && OMISSION_HINT_RE.test(key)) {
+  const lastSpace = key.lastIndexOf(' ');
+  if (lastSpace > 0 && key.length < 140 && OMISSION_LAST.has(key.slice(lastSpace + 1)) && OMISSION_HINT_RE.test(key)) {
     for (const suf of DOC_OMITTED_SUFFIXES) {
       if (key.endsWith(suf)) {
         const name = cleanFirst(first).slice(0, -suf.length).split('•')[0]!.trim();
@@ -379,7 +386,7 @@ export function classifyContent(text: string): ContentClass | null {
   }
 
   // Deleted by admin etc.
-  if (key.length < 100) {
+  if (key.length < 100 && key.length > 12 && DELETED_FIRST_CHARS.has(c0)) {
     for (const p of DELETED_PREFIXES) {
       if (key.startsWith(p)) return { type: 'deleted', text: '' };
     }
@@ -389,7 +396,7 @@ export function classifyContent(text: string): ContentClass | null {
   if (POLL_HEADERS.has(key)) return parsePoll(rest);
 
   // Calls
-  if (key.length < 90 && CALL_HINT_RE.test(key)) {
+  if (key.length < 70 && CALL_HINT_RE.test(key)) {
     for (const r of CALL_RULES) {
       const cm = r.re.exec(key);
       if (cm && isCallRemainder(key.slice(cm[0].length))) {
@@ -401,10 +408,12 @@ export function classifyContent(text: string): ContentClass | null {
     }
   }
 
-  // Locations
-  const cf = cleanFirst(first);
-  if (LOCATION_RE.test(cf)) return { type: 'location', text: rest };
-  if (nl === -1 && MAPS_ONLY_RE.test(cf.trim())) return { type: 'location', text: '' };
+  // Locations (always contain a URL)
+  if (key.indexOf('http') !== -1) {
+    const cf = first.trim();
+    if (LOCATION_RE.test(cf)) return { type: 'location', text: rest };
+    if (nl === -1 && MAPS_ONLY_RE.test(cf)) return { type: 'location', text: '' };
+  }
 
   return null;
 }

@@ -446,6 +446,8 @@ export interface ChatStats {
   duo: DuoStats | null;
   awards: Award[];
   computeMs: number;
+  /** Milliseconds per engine stage (diagnostics). */
+  timings: Record<string, number>;
 }
 
 export interface WordSearchResult {

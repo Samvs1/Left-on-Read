@@ -108,8 +108,30 @@ export interface Prepared {
   polls: PollInfo[];
 }
 
-const TOKEN_RE = /[\p{L}\p{N}]+(?:['’][\p{L}]+)*/gu;
-const LINK_STRIP_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
+/** Lazily filled BMP tables: 1 = letter/number/mark, 2 = other. */
+const WORD_TABLE = new Uint8Array(65536);
+const WORD_CHAR_RE = /[\p{L}\p{N}\p{M}]/u;
+function isWordCode(c: number): boolean {
+  if (c < 128) return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57);
+  if (c >= 0xd800 && c <= 0xdfff) return false;
+  let k = WORD_TABLE[c]!;
+  if (k === 0) {
+    k = WORD_CHAR_RE.test(String.fromCharCode(c)) ? 1 : 2;
+    WORD_TABLE[c] = k;
+  }
+  return k === 1;
+}
+/** 1 = upper case, 2 = lower case, 3 = caseless. */
+const CASE_TABLE = new Uint8Array(65536);
+function caseCode(c: number): number {
+  let k = CASE_TABLE[c]!;
+  if (k === 0) {
+    const ch = String.fromCharCode(c);
+    k = ch.toLowerCase() !== ch ? 1 : ch.toUpperCase() !== ch ? 2 : 3;
+    CASE_TABLE[c] = k;
+  }
+  return k;
+}
 const ELONG_RE = /(\p{L})\1\1/u;
 const ONE_LETTER_RE = /^(\p{L})\1*$/u;
 
@@ -224,6 +246,8 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
   const vSent: number[] = [];
   const vNeg: number[] = [];
   const vInt: number[] = [];
+  /** Bit set of phrase lists (greeting, bye, night, sorry, love) this word can start. */
+  const vPhrase: number[] = [];
   const laughKinds: string[] = [];
   const laughKindIdx = new Map<string, number>();
 
@@ -255,11 +279,25 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
     vSent.push(SENTIMENT_WORDS.get(w) ?? 0);
     vNeg.push(NEGATORS.has(w) ? 1 : 0);
     vInt.push(INTENSIFIERS.has(w) ? 1 : 0);
+    vPhrase.push(
+      (GREET.byFirst.has(w) ? 1 : 0) | (BYE.byFirst.has(w) ? 2 : 0) | (NIGHT.byFirst.has(w) ? 4 : 0) | (SORRY.byFirst.has(w) ? 8 : 0) | (LOVE.byFirst.has(w) ? 16 : 0),
+    );
     return id;
   };
 
   const toks: string[] = [];
-  const ids: number[] = [];
+  let idsBuf = new Int32Array(1024);
+  let nIds = 0;
+  const spans = new Int32Array(64);
+  const flushToken = (text: string, a: number, b: number, hasUpper: boolean, curly: boolean): number => {
+    let w = text.slice(a, b);
+    if (hasUpper) w = w.toLowerCase();
+    if (curly) w = w.replace(/’/g, "'");
+    const id = vocabMap.get(w);
+    return id === undefined ? addWord(w) : id;
+  };
+  const rawEmoji = new Map<string, number>();
+  const rawTone = new Map<string, number>();
   for (let i = 0; i < n; i++) {
     const m = msgs[i]!;
     ts[i] = m.timestamp;
@@ -293,44 +331,141 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
     linkStart[i] = linkDomains.n;
     if (text.length > 0 && m.type !== 'system') {
       chars[i] = text.length;
-      const lower = text.toLowerCase();
-      const noLinks = m.links.length > 0 ? lower.replace(LINK_STRIP_RE, ' ') : lower;
-      toks.length = 0;
-      ids.length = 0;
-      let letterCount = 0;
-      TOKEN_RE.lastIndex = 0;
-      let mm: RegExpExecArray | null;
-      while ((mm = TOKEN_RE.exec(noLinks)) !== null) {
-        let w = mm[0];
-        if (w.indexOf('’') !== -1) w = w.replace(/’/g, "'");
-        let id = vocabMap.get(w);
-        if (id === undefined) id = addWord(w);
-        toks.push(w);
-        ids.push(id);
-        tokens.push(id);
-        letterCount += w.length;
+      // ---- Single-pass scan: tokens, case, punctuation (URLs skipped) ----
+      let spanAt = 0;
+      let spanStart = Infinity;
+      let spanEnd = 0;
+      let nSpans = 0;
+      if (m.links.length > 0) {
+        let from = 0;
+        for (const l of m.links) {
+          const at = text.indexOf(l, from);
+          if (at < 0) continue;
+          spans[nSpans * 2] = at;
+          spans[nSpans * 2 + 1] = at + l.length;
+          nSpans++;
+          from = at + l.length;
+        }
+        if (nSpans > 0) {
+          spanStart = spans[0]!;
+          spanEnd = spans[1]!;
+        }
       }
-      words[i] = ids.length;
+      nIds = 0;
+      let letterCount = 0;
+      let phraseBits = 0;
+      let up = 0;
+      let lo = 0;
+      let qMarks = 0;
+      let ex = 0;
+      let commas = 0;
+      let dots = 0;
+      let ellipsis = false;
+      let lastNS = 0;
+      let prevNS = 0;
+      let tStart = -1;
+      let tUpper = false;
+      let tCurly = false;
+      const L = text.length;
+      for (let q = 0; q <= L; q++) {
+        if (q === spanStart) {
+          if (tStart >= 0) {
+            const id = flushToken(text, tStart, q, tUpper, tCurly);
+            idsBuf[nIds++] = id;
+            tokens.push(id);
+            phraseBits |= vPhrase[id]!;
+            letterCount += q - tStart;
+            tStart = -1;
+          }
+          q = spanEnd - 1;
+          spanAt++;
+          spanStart = spanAt < nSpans ? spans[spanAt * 2]! : Infinity;
+          spanEnd = spanAt < nSpans ? spans[spanAt * 2 + 1]! : 0;
+          lastNS = 120; // a URL counts as non-space content
+          prevNS = 0;
+          dots = 0;
+          continue;
+        }
+        const c = q < L ? text.charCodeAt(q) : 32;
+        let word = false;
+        let upper = false;
+        if (c < 128) {
+          if (c >= 97 && c <= 122) {
+            word = true;
+            lo++;
+          } else if (c >= 65 && c <= 90) {
+            word = true;
+            upper = true;
+            up++;
+          } else if (c >= 48 && c <= 57) {
+            word = true;
+          } else if (c === 39 && tStart >= 0 && q + 1 < L && isWordCode(text.charCodeAt(q + 1))) {
+            word = true;
+          } else if (c === 63) qMarks++;
+          else if (c === 33) ex++;
+          else if (c === 44) commas++;
+          if (c === 46) {
+            if (++dots >= 3) ellipsis = true;
+          } else dots = 0;
+        } else {
+          dots = 0;
+          if (c >= 0xd800 && c <= 0xdfff) {
+            word = false;
+          } else if (c === 0x2019 && tStart >= 0 && q + 1 < L && isWordCode(text.charCodeAt(q + 1))) {
+            word = true;
+            tCurly = true;
+          } else if (c === 0x2026) {
+            ellipsis = true;
+          } else if (isWordCode(c)) {
+            word = true;
+            const k = caseCode(c);
+            if (k === 1) {
+              upper = true;
+              up++;
+            } else if (k === 2) lo++;
+          }
+        }
+        if (c !== 32 && c !== 10 && c !== 9 && c !== 13 && c !== 160 && q < L) {
+          prevNS = lastNS;
+          lastNS = c;
+        }
+        if (word) {
+          if (tStart < 0) {
+            tStart = q;
+            tUpper = false;
+            tCurly = c === 0x2019;
+          }
+          if (upper) tUpper = true;
+        } else if (tStart >= 0) {
+          const id = flushToken(text, tStart, q, tUpper, tCurly);
+          idsBuf[nIds++] = id;
+          tokens.push(id);
+          phraseBits |= vPhrase[id]!;
+          letterCount += q - tStart;
+          tStart = -1;
+          if (nIds === idsBuf.length) {
+            const bigger = new Int32Array(idsBuf.length * 2);
+            bigger.set(idsBuf);
+            idsBuf = bigger;
+          }
+        }
+      }
+      words[i] = nIds;
       letters[i] = letterCount;
 
       // Style flags
-      if (noLinks.indexOf('?') !== -1) f |= F.QUESTION;
-      let ex = 0;
-      for (let k = noLinks.indexOf('!'); k !== -1; k = noLinks.indexOf('!', k + 1)) ex++;
+      if (qMarks > 0) f |= F.QUESTION;
       if (ex > 0) {
         f |= F.EXCLAIM;
         exclam[i] = Math.min(ex, 65535);
       }
-      if (noLinks.indexOf('...') !== -1 || noLinks.indexOf('…') !== -1) f |= F.ELLIPSIS;
-      if (noLinks.indexOf(',') !== -1) f |= F.COMMA;
-      const trimmed = noLinks.trimEnd();
-      if (trimmed.endsWith('.') && !trimmed.endsWith('..')) f |= F.PERIOD;
+      if (ellipsis) f |= F.ELLIPSIS;
+      if (commas > 0) f |= F.COMMA;
+      if (lastNS === 46 && prevNS !== 46) f |= F.PERIOD;
       if (m.links.length > 0) f |= F.LINK;
       if (letterCount >= 3) {
-        const hasUpper = lower !== text;
-        const hasLower = text.toUpperCase() !== text;
-        if (hasUpper && !hasLower && letterCount >= 4) f |= F.CAPS;
-        else if (!hasUpper && hasLower) f |= F.LOWER;
+        if (up >= 4 && lo === 0) f |= F.CAPS;
+        else if (lo >= 3 && up === 0) f |= F.LOWER;
       }
 
       // Token-level features
@@ -339,8 +474,8 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
       let raw = 0;
       let hits = 0;
       let elong = false;
-      for (let k = 0; k < ids.length; k++) {
-        const id = ids[k]!;
+      for (let k = 0; k < nIds; k++) {
+        const id = idsBuf[k]!;
         if (vLaugh[id]! >= 0) laughTok++;
         if (vSwear[id]) swearTok++;
         if (vElong[id]) elong = true;
@@ -348,10 +483,10 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
         if (sv !== 0) {
           let v = sv;
           // Intensifier right before
-          if (k > 0 && vInt[ids[k - 1]!]) v *= 1.5;
+          if (k > 0 && vInt[idsBuf[k - 1]!]) v *= 1.5;
           // Negation within the previous 3 tokens flips and dampens
           for (let b = 1; b <= 3 && k - b >= 0; b++) {
-            if (vNeg[ids[k - b]!]) {
+            if (vNeg[idsBuf[k - b]!]) {
               v *= -0.75;
               break;
             }
@@ -367,16 +502,22 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
       let laughEmo = 0;
       let otherEmo = 0;
       for (const e of m.emojis) {
-        const key = emojiKey(e);
-        let eid = emojiMap.get(key);
+        let eid = rawEmoji.get(e);
         if (eid === undefined) {
-          eid = emojiKeys.length;
-          emojiMap.set(key, eid);
-          emojiKeys.push(key);
-          emojiDisp.push(emojiDisplay(key));
+          const key = emojiKey(e);
+          eid = emojiMap.get(key);
+          if (eid === undefined) {
+            eid = emojiKeys.length;
+            emojiMap.set(key, eid);
+            emojiKeys.push(key);
+            emojiDisp.push(emojiDisplay(key));
+          }
+          rawEmoji.set(e, eid);
+          rawTone.set(e, emojiSkinTone(e));
         }
+        const key = emojiKeys[eid]!;
         emoIds.push(eid);
-        emoTones.push(emojiSkinTone(e));
+        emoTones.push(rawTone.get(e)!);
         if (LAUGH_EMOJIS.has(key)) laughEmo++;
         else otherEmo++;
         const es = SENTIMENT_EMOJIS.get(key);
@@ -389,21 +530,23 @@ export function prepare(parsed: ParseResult, opts: PrepareOptions = {}): Prepare
       laughs[i] = Math.min(255, laughTotal);
       if (laughTotal > 0) {
         f |= F.LAUGH;
-        if (laughTok === ids.length && otherEmo === 0) f |= F.LAUGH_ONLY;
+        if (laughTok === nIds && otherEmo === 0) f |= F.LAUGH_ONLY;
       }
-      if (ids.length === 0 && m.emojis.length > 0) f |= F.EMOJI_ONLY;
+      if (nIds === 0 && m.emojis.length > 0) f |= F.EMOJI_ONLY;
       if (hits > 0) {
         f |= F.SENTIMENT;
         sentiment[i] = squash(raw);
       }
 
-      // Phrases
-      if (toks.length > 0) {
-        if (hasPhrase(GREET, toks, 0, Math.min(2, toks.length))) f |= F.GREETING;
-        if (toks.length <= 8 ? hasPhrase(BYE, toks) : endsWithPhrase(BYE, toks)) f |= F.GOODBYE;
-        if (toks.length <= 10 ? hasPhrase(NIGHT, toks) : endsWithPhrase(NIGHT, toks)) f |= F.GOODNIGHT;
-        if (hasPhrase(SORRY, toks)) f |= F.APOLOGY;
-        if (hasPhrase(LOVE, toks)) f |= F.LOVE;
+      // Phrases (only when some token can start a phrase)
+      if (phraseBits !== 0) {
+        toks.length = 0;
+        for (let k = 0; k < nIds; k++) toks.push(vocab[idsBuf[k]!]!);
+        if (phraseBits & 1 && hasPhrase(GREET, toks, 0, Math.min(2, toks.length))) f |= F.GREETING;
+        if (phraseBits & 2 && (toks.length <= 8 ? hasPhrase(BYE, toks) : endsWithPhrase(BYE, toks))) f |= F.GOODBYE;
+        if (phraseBits & 4 && (toks.length <= 10 ? hasPhrase(NIGHT, toks) : endsWithPhrase(NIGHT, toks))) f |= F.GOODNIGHT;
+        if (phraseBits & 8 && hasPhrase(SORRY, toks)) f |= F.APOLOGY;
+        if (phraseBits & 16 && hasPhrase(LOVE, toks)) f |= F.LOVE;
       }
 
       // Links
