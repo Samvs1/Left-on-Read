@@ -11,7 +11,7 @@ import type { TKey, TParams } from '../../i18n';
 import { AWARD_META, awardValue } from '../awards';
 import { personColor, onPersonColor } from '../colors';
 import { initials } from '../names';
-import { fmtCompact, fmtDate, fmtDuration, fmtHour, fmtMonthRange, fmtNum, fmtPct, fmtTimes, weekdayName } from '../format';
+import { fmtCompact, fmtDate, fmtDateRange, fmtDuration, fmtHour, fmtMonthRange, fmtNum, fmtPct, fmtTimes, weekdayName } from '../format';
 import { CountUp } from '../components/controls';
 import { prefersReducedMotion } from '../theme';
 
@@ -71,7 +71,22 @@ function Avatar({ c, person, size = 44 }: { c: SlideCtx; person: number; size?: 
 }
 
 function Bubble({ c, author, text }: { c: SlideCtx; author: number; text: string }) {
-  if (c.still || c.anonymous) return null;
+  if (c.still || c.anonymous) {
+    // Share cards and anonymous mode never show message text: draw a redacted
+    // bubble instead (bar lengths hint at the message length, nothing more).
+    const len = Math.min(3, Math.max(1, Math.ceil(text.length / 60)));
+    return (
+      <div className="max-w-[92%] rounded-[1.3rem] rounded-bl-md bg-white/15 px-4 py-3 ring-1 ring-white/20">
+        <span className="mb-1.5 block text-xs font-semibold opacity-70">{c.name(author)}</span>
+        <span className="flex flex-col gap-1.5" aria-hidden="true">
+          {Array.from({ length: len }, (_, i) => (
+            <span key={i} className="block h-2.5 rounded-full bg-white/45" style={{ width: `${i === len - 1 ? 40 + ((text.length * 7) % 40) : 100}%`, minWidth: '3.5rem' }} />
+          ))}
+        </span>
+        <span className="sr-only">{c.t('common.hidden')}</span>
+      </div>
+    );
+  }
   return (
     <div className="max-w-[92%] rounded-[1.3rem] rounded-bl-md bg-white/15 px-4 py-2.5 text-left text-[clamp(0.9rem,4cqw,1.1rem)] leading-snug ring-1 ring-white/20 backdrop-blur" data-private>
       <span className="mb-0.5 block text-xs font-semibold opacity-70">{c.name(author)}</span>
@@ -178,7 +193,7 @@ function Intro({ c }: { c: SlideCtx }) {
           ))}
         </Rise>
         <Rise still={c.still} delay={0.7} className="mt-8">
-          <Line>{t('story.introSub', { messages: fmtNum(summary.personMessages), days: fmtNum(days) })}</Line>
+          <Line>{t('story.introSub', { messages: t('common.messages', { n: fmtNum(summary.personMessages) }), days: t('common.days', { n: fmtNum(days) }) })}</Line>
         </Rise>
       </Frame>
     </>
@@ -722,9 +737,7 @@ function Streak({ c }: { c: SlideCtx }) {
         <Rise still={c.still} delay={0.15}>
           <Big className="mt-3">{fmtNum(st.days)}</Big>
           <Kicker>{c.t('story.streakLine', { n: '' }).replace(/^\s*/, '')}</Kicker>
-          <Line className="mt-2">
-            {fmtDate(st.start)} – {fmtDate(st.end)}
-          </Line>
+          <Line className="mt-2">{fmtDateRange(st.start, st.end, true)}</Line>
         </Rise>
         <Rise still={c.still} delay={0.7} className="mt-6 flex flex-wrap gap-1.5">
           {Array.from({ length: Math.min(st.days, 60) }, (_, i) => (

@@ -5,12 +5,12 @@ import { Segmented } from './controls';
 type Variant = 'header' | 'scrollExport' | 'withoutMedia' | 'saveFiles' | 'dots' | 'moreExport' | 'shareTo';
 
 /** Simple, brand-neutral phone illustrations for the export steps. */
-function PhoneSketch({ variant, label }: { variant: Variant; label?: string }) {
+function PhoneSketch({ variant, label, small = false }: { variant: Variant; label?: string; small?: boolean }) {
   const hi = 'var(--brand)';
   const line = 'var(--line-strong)';
   const soft = 'var(--surface-2)';
   return (
-    <svg viewBox="0 0 120 210" className="h-auto w-full max-w-[9.5rem]" role="img" aria-label={label}>
+    <svg viewBox="0 0 120 210" className={`h-auto w-full ${small ? 'max-w-[5.5rem]' : 'max-w-[9.5rem]'}`} role="img" aria-label={label}>
       <rect x="3" y="3" width="114" height="204" rx="20" fill="var(--surface)" stroke={line} strokeWidth="2" />
       <rect x="44" y="9" width="32" height="6" rx="3" fill={line} />
       {/* header */}
@@ -120,11 +120,11 @@ export function ExportGuide({ compact = false }: { compact?: boolean }) {
       </div>
       <ol className={`grid gap-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
         {steps.map(([key, variant], i) => (
-          <li key={key} className="card flex flex-col items-center gap-3 p-4 text-center">
-            <PhoneSketch variant={variant} label={t(key)} />
+          <li key={key} className={`card flex flex-col items-center text-center ${compact ? 'gap-2 p-3' : 'gap-3 p-4'}`}>
+            <PhoneSketch variant={variant} label={t(key)} small={compact} />
             <div>
               <span className="mx-auto mb-1.5 grid h-6 w-6 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
-              <p className="text-[0.9rem] font-medium leading-snug">{t(key)}</p>
+              <p className={`font-medium leading-snug ${compact ? 'text-[0.82rem]' : 'text-[0.9rem]'}`}>{t(key)}</p>
             </div>
           </li>
         ))}

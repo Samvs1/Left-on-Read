@@ -11,7 +11,7 @@ import { Avatar } from '../components/data';
 import { Icon } from '../components/Icon';
 import { useNamer } from '../names';
 import { go } from '../router';
-import { fmtDateShort, fmtNum } from '../format';
+import { fmtDateRange, fmtDateShort, fmtNum } from '../format';
 import { Footer } from '../components/Footer';
 
 const SECTIONS = ['overview', 'people', 'dynamics', 'time', 'eras', 'words', 'emojis', 'media', 'mood', 'group', 'awards'] as const;
@@ -67,7 +67,7 @@ export function DashboardPage({ section }: { section?: string | null }) {
               ))}
             </span>
             <span>
-              {fmtDateShort(stats?.meta.firstTs || chat.summary.firstTs)} – {fmtDateShort(stats?.meta.lastTs || chat.summary.lastTs)}
+              {fmtDateRange(stats?.meta.firstTs || chat.summary.firstTs, stats?.meta.lastTs || chat.summary.lastTs)}
             </span>
             <span>{t('common.messages', { n: fmtNum(stats?.meta.totalMessages ?? chat.summary.messages) })}</span>
             {filtered && (

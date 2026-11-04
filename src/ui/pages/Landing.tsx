@@ -124,11 +124,9 @@ export function Landing() {
                 <div role="alert" className="card mt-6 border-coral/40 p-4">
                   <p className="font-display text-lg font-bold">{t('errors.title')}</p>
                   <p className="mt-1 text-sm text-ink-2">{t(`errors.${error.code}` as TKey) || t('errors.UNKNOWN')}</p>
-                  <p className="mt-3 text-sm font-semibold">{t('errors.howTo')}</p>
-                  <a href="#export" className="text-sm font-semibold text-brand underline underline-offset-4">
-                    {t('landing.exportTitle')}
-                  </a>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <p className="mb-3 mt-4 text-sm font-semibold">{t('errors.howTo')}</p>
+                  <ExportGuide compact />
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" className="btn btn-sm btn-ghost" onClick={picker.open}>
                       {t('errors.back')}
                     </button>

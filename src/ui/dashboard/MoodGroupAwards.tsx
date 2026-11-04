@@ -192,7 +192,7 @@ export function Group({ k }: { k: Kit }) {
             title={t('charts.network')}
             takeaway={tk.network(s, t, name)}
             height={(n) => (n ? 360 : 440)}
-            build={(th) => networkOption(th, g.network.nodes.map((n) => ({ id: n.id, name: name(n.id), value: n.messages, color: k.color(n.id) })), g.network.edges)}
+            build={(th, narrow) => networkOption(th, g.network.nodes.map((n) => ({ id: n.id, name: name(n.id), value: n.messages, color: k.color(n.id) })), g.network.edges, narrow)}
             table={{ columns: [t('common.person'), t('common.person'), t('common.count')], rows: g.network.edges.slice(0, 40).map((e) => [name(e.a), name(e.b), e.weight]) }}
             onClick={(p) => {
               const idx = s.people.findIndex((x) => name(x.id) === p.name);

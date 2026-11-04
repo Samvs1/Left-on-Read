@@ -183,7 +183,7 @@ export const nl: typeof en = {
     stillCounting: 'Nog aan het tellen…',
     introDuo: 'Dit is je chat met',
     introGroup: 'Dit is',
-    introSub: '{messages} berichten. {days} dagen. Tijd om uit te pakken.',
+    introSub: '{messages}. {days}. Tijd om uit te pakken.',
     totalPre: 'Samen stuurden jullie',
     totalPost: 'berichten',
     perDay: 'Dat zijn er {n} per dag, elke dag.',

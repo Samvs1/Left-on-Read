@@ -181,7 +181,7 @@ export const en = {
     stillCounting: 'Still counting…',
     introDuo: 'This is your chat with',
     introGroup: 'This is',
-    introSub: '{messages} messages. {days} days. Let\'s unwrap it.',
+    introSub: '{messages}. {days}. Let\'s unwrap it.',
     totalPre: 'Together you sent',
     totalPost: 'messages',
     perDay: 'That\'s {n} a day, every single day.',

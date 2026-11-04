@@ -433,9 +433,28 @@ export function networkOption(
   th: ChartTheme,
   nodes: { id: number; name: string; value: number; color: string }[],
   edges: { a: number; b: number; weight: number }[],
+  narrow = false,
 ): EChartsOption {
   const maxV = Math.max(1, ...nodes.map((n) => n.value));
   const maxW = Math.max(1, ...edges.map((e) => e.weight));
+  const size = (v: number) => 14 + 34 * Math.sqrt(v / maxV);
+  // Up to 12 people sit on a circle, biggest at the top, going clockwise. Each
+  // label points away from the centre (on phones: above or below the node) and
+  // the plot keeps a margin wide enough for the longest truncated name, so no
+  // label is ever clipped at 360px.
+  const circle = nodes.length <= 12;
+  const labelW = Math.min(76, 12 + 6.6 * Math.max(3, ...nodes.map((n) => n.name.length)));
+  const rMax = size(maxV) / 2;
+  const angle = (i: number) => -Math.PI / 2 + (2 * Math.PI * i) / nodes.length;
+  const side = (i: number): 'top' | 'bottom' | 'left' | 'right' => {
+    const x = Math.cos(angle(i));
+    const y = Math.sin(angle(i));
+    if (!narrow && Math.abs(x) > 0.55) return x > 0 ? 'right' : 'left';
+    return y < -1e-6 ? 'top' : 'bottom';
+  };
+  const pad = narrow
+    ? { left: Math.max(labelW / 2, rMax) + 6, right: Math.max(labelW / 2, rMax) + 6, top: rMax + 24, bottom: rMax + 24 }
+    : { left: labelW + rMax + 10, right: labelW + rMax + 10, top: rMax + 24, bottom: rMax + 24 };
   return {
     ...base(th),
     tooltip: tooltip(th, {
@@ -447,25 +466,37 @@ export function networkOption(
     series: [
       {
         type: 'graph',
-        layout: nodes.length <= 9 ? 'circular' : 'force',
-        circular: { rotateLabel: false },
+        layout: circle ? 'none' : 'force',
         force: { repulsion: 260, edgeLength: [60, 160], gravity: 0.08 },
+        ...(circle ? { ...pad, preserveAspect: 'contain' } : { left: 40, right: 40, top: 30, bottom: 30 }),
         roam: false,
-        draggable: true,
-        label: { show: true, position: 'right', color: th.ink, fontFamily: FONT, fontSize: 12 },
+        draggable: !circle,
+        label: {
+          show: true,
+          position: 'right',
+          color: th.ink,
+          fontFamily: FONT,
+          fontSize: 12,
+          fontWeight: 600,
+          width: labelW,
+          overflow: 'truncate',
+          textBorderColor: th.surface,
+          textBorderWidth: 3,
+        },
         lineStyle: { color: th.dark ? 'rgba(255,255,255,0.22)' : 'rgba(22,20,29,0.18)', curveness: 0.15 },
         emphasis: { focus: 'adjacency', lineStyle: { width: 6 } },
-        data: nodes.map((n) => ({
+        data: nodes.map((n, i) => ({
           id: String(n.id),
           name: n.name,
           value: n.value,
-          symbolSize: 14 + 34 * Math.sqrt(n.value / maxV),
+          ...(circle ? { x: Math.cos(angle(i)) * 100, y: Math.sin(angle(i)) * 100, label: { position: side(i) } } : {}),
+          symbolSize: size(n.value),
           itemStyle: { color: n.color, borderColor: th.surface, borderWidth: 2 },
         })),
         links: edges.map((e) => ({ source: String(e.a), target: String(e.b), value: e.weight, lineStyle: { width: 1 + 7 * (e.weight / maxW) } })),
       },
     ],
-  };
+  } as EChartsOption;
 }
 
 /* ------------------------------------------------------------------ */

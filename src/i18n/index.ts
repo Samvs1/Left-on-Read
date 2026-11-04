@@ -90,12 +90,25 @@ function plural(lang: Lang, n: number): Intl.LDMLPluralRule {
   return pr.select(n);
 }
 
+/**
+ * The number that picks the plural form. Callers usually pass an already
+ * formatted string ("1,234" / "1.234"), so undo the locale's grouping first:
+ * otherwise Dutch "1.000" would read as one and pick the singular.
+ */
+function pluralCount(lang: Lang, params?: TParams): number {
+  const c = params?.['count'] ?? params?.['n'];
+  if (typeof c === 'number') return c;
+  if (typeof c !== 'string') return 0;
+  const norm = lang === 'nl' ? c.replace(/\./g, '').replace(',', '.') : c.replace(/,/g, '');
+  const v = parseFloat(norm.replace(/[^\d.-]/g, ''));
+  return Number.isFinite(v) ? v : 0;
+}
+
 export function translate(lang: Lang, key: TKey | string, params?: TParams): string {
   let s = lookup(DICTS[lang] ?? en, key) ?? lookup(en, key) ?? key;
   if (s.includes('|')) {
     const forms = s.split('|');
-    const n = Number(params?.['n'] ?? params?.['count'] ?? 0);
-    s = (plural(lang, n) === 'one' ? forms[0] : forms[forms.length - 1]) ?? s;
+    s = (plural(lang, pluralCount(lang, params)) === 'one' ? forms[0] : forms[forms.length - 1]) ?? s;
   }
   if (params) s = s.replace(/\{(\w+)\}/g, (m, k: string) => (params[k] !== undefined ? String(params[k]) : m));
   return s;

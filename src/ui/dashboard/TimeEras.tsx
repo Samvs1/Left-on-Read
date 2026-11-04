@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Bubble, ChartCard, SectionHeader, StatTile } from '../components/data';
-import { fmtCompact, fmtDate, fmtDuration, fmtHour, fmtHourShort, fmtMonthRange, fmtNum, fmtPct, fmtTimes, weekdayName, fmtDateShort } from '../format';
+import { fmtCompact, fmtDate, fmtDuration, fmtHour, fmtHourShort, fmtMonthRange, fmtNum, fmtPct, fmtTimes, weekdayName, fmtDateShort, fmtDateRange } from '../format';
 import { calendarOption, clockOption, columnsOption, erasOption, weekHourOption } from '../charts/options';
 import { tk } from '../takeaways';
 import { ChartBlock } from './ChartBlock';
@@ -23,7 +23,7 @@ export function Time({ k }: { k: Kit }) {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile icon="calendar" label={t('stats.busiestDay')} value={bd ? fmtCompact(bd.count) : '–'} sub={bd ? fmtDateShort(bd.day) : undefined} />
         <StatTile icon="clock" label={t('stats.busiestHour')} value={fmtHour(s.time.busiestHour)} sub={weekdayName(s.time.busiestWeekday)} />
-        <StatTile icon="zap" label={t('stats.streak')} value={t('common.days', { n: s.time.longestStreak.days })} sub={s.time.longestStreak.days ? `${fmtDateShort(s.time.longestStreak.start)} – ${fmtDateShort(s.time.longestStreak.end)}` : undefined} />
+        <StatTile icon="zap" label={t('stats.streak')} value={t('common.days', { n: s.time.longestStreak.days })} sub={s.time.longestStreak.days ? fmtDateRange(s.time.longestStreak.start, s.time.longestStreak.end) : undefined} />
         <StatTile icon="wifiOff" label={t('stats.silence')} value={silence ? fmtDuration(silence.ms) : '–'} sub={silence ? t('stats.brokenBy', { name: name(silence.brokenBy) }) : undefined} />
         <StatTile icon="moon" label={t('stats.nightOwl')} value={fmtPct(s.time.nightOwlPct)} sub="00:00–05:00" />
         <StatTile icon="sun" label={t('stats.earlyBird')} value={fmtPct(s.time.earlyBirdPct)} sub="05:00–08:00" />

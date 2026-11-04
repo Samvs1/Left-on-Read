@@ -7,7 +7,7 @@ import type { Award, ChatStats } from '../../engine/types';
 import { useT, type TKey } from '../../i18n';
 import { AWARD_META, awardValue } from '../awards';
 import { personColor, onPersonColor } from '../colors';
-import { fmtCompact, fmtDuration, fmtNum, fmtPct, fmtDateShort } from '../format';
+import { fmtCompact, fmtDuration, fmtNum, fmtPct, fmtDateRange } from '../format';
 import { initials, useNamer } from '../names';
 import type { ShareFormat } from '../lib/share';
 
@@ -71,7 +71,7 @@ export function OverviewCard({ stats, format }: { stats: ChatStats; format: Shar
         {title}
       </h1>
       <p className="mt-2 text-sm text-white/75">
-        {fmtDateShort(stats.meta.firstTs)} – {fmtDateShort(stats.meta.lastTs)}
+        {fmtDateRange(stats.meta.firstTs, stats.meta.lastTs)}
       </p>
       <div className={`mt-6 grid grid-cols-2 gap-2.5 ${format === 'square' ? 'mt-5' : ''}`}>
         {cells.map(([k, v]) => (

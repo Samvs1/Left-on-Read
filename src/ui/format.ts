@@ -68,6 +68,12 @@ export const fmtMonthShort = (ts: number) => df('monthShort', { month: 'short', 
 export const fmtTime = (ts: number) => df('time', { hour: '2-digit', minute: '2-digit' }).format(ts);
 export const fmtDateTime = (ts: number) => df('dt', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ts);
 
+/** "Mar 14 – Apr 2, 2024"; a single day collapses to "Mar 14, 2024". */
+export function fmtDateRange(a: number, b: number, long = false): string {
+  const f = long ? df('date', { day: 'numeric', month: 'long', year: 'numeric' }) : df('dateShort', { day: 'numeric', month: 'short', year: 'numeric' });
+  return b > a ? f.formatRange(a, b) : f.format(a);
+}
+
 /** "Mar–Aug 2023" or "Nov 2022 – Feb 2023". */
 export function fmtMonthRange(a: number, b: number): string {
   const fa = new Date(a);
