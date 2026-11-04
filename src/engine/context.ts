@@ -8,6 +8,9 @@ import type { Settings } from './types';
 import { DAY, HOUR, MINUTE, monthOf, weekdayOfDay } from './util';
 import { STOPWORDS } from './lexicon/stopwords';
 
+/** Categorical palette size: series beyond this fold into "Others". */
+export const MAX_SERIES = 8;
+
 export interface Ctx {
   P: Prepared;
   s: Settings;
@@ -143,18 +146,20 @@ export function buildContext(P: Prepared, s: Settings): Ctx {
     stopCache[v] = P.vocabStop[v] || custom.has(w) || w.length < 2 || /^\d+$/.test(w) || P.vocabLaugh[v]! >= 0 || STOPWORDS.has(w) ? 1 : 0;
   }
 
-  // Main people for charts
+  // Main people for charts. Colours follow the person (global index), never the
+  // rank in the current view, so only the first 8 people (one palette slot each)
+  // can be shown individually; everyone else folds into "Others".
   const total = m || 1;
-  const order = counts.map((cnt, i) => ({ i, cnt })).sort((a, b) => b.cnt - a.cnt || a.i - b.i);
   const mainPeople: number[] = [];
   const otherPeople: number[] = [];
-  for (const { i, cnt } of order) {
-    const share = (cnt / total) * 100;
-    if ((np <= 2 || (share >= s.othersThresholdPct && mainPeople.length < 12)) && (cnt > 0 || np <= 2)) mainPeople.push(i);
+  for (let i = 0; i < np; i++) {
+    const share = (counts[i]! / total) * 100;
+    if (np <= 2 || (i < MAX_SERIES && share >= s.othersThresholdPct && counts[i]! > 0)) mainPeople.push(i);
     else otherPeople.push(i);
   }
-  // Never put a single person in "Others": promote them instead.
-  if (otherPeople.length === 1) mainPeople.push(otherPeople.pop()!);
+  // Never put a single person in "Others" when a slot is free: promote them instead.
+  if (otherPeople.length === 1 && otherPeople[0]! < MAX_SERIES) mainPeople.push(otherPeople.pop()!);
+  mainPeople.sort((a, b) => a - b);
   const seriesRow = new Int32Array(np);
   const rows = mainPeople.length + (otherPeople.length > 0 ? 1 : 0);
   mainPeople.forEach((p, r) => (seriesRow[p] = r));

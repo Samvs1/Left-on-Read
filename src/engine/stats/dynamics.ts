@@ -51,6 +51,8 @@ export interface DynamicsPerPerson {
   pairCount: number[][];
   pairTimes: number[][][];
   conversationsJoined: number[];
+  /** Conversation starts per person in 8 slots: weekday/weekend × morning/afternoon/evening/night. */
+  initiationSlots: number[][];
 }
 
 export function computeDynamics(ctx: Ctx): { dynamics: Omit<DynamicsStats, 'effort'>; perPerson: DynamicsPerPerson } {
@@ -79,6 +81,7 @@ export function computeDynamics(ctx: Ctx): { dynamics: Omit<DynamicsStats, 'effo
     pairCount: [],
     pairTimes: [],
     conversationsJoined: zeros(np),
+    initiationSlots: Array.from({ length: np }, () => zeros(8)),
   };
 
   // Top people for the full pair matrix (cliques, fastest pairs)
@@ -102,6 +105,11 @@ export function computeDynamics(ctx: Ctx): { dynamics: Omit<DynamicsStats, 'effo
     const a1 = convEnd[c]!;
     pp.initiations[au[a0]!]!++;
     pp.endings[au[a1]!]!++;
+    {
+      const h = hour[a0]!;
+      const part = h >= 5 && h < 12 ? 0 : h >= 12 && h < 17 ? 1 : h >= 17 && h < 22 ? 2 : 3;
+      pp.initiationSlots[au[a0]!]![(ctx.wd[a0]! >= 5 ? 4 : 0) + part]!++;
+    }
     const len = a1 - a0 + 1;
     const dur = tl[a1]! - tl[a0]!;
     convLens.push(len);

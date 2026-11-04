@@ -124,6 +124,7 @@ export function computeStats(P: Prepared, settingsIn: Partial<Settings> = {}): C
       laughsTriggered: laughter.triggeredByPerson[a]!,
       initiations: dpp.initiations[a]!,
       initiationShare: safeDiv(dpp.initiations[a]!, dynamics.conversations),
+      initiationSlots: dpp.initiationSlots[a]!,
       endings: dpp.endings[a]!,
       endingShare: safeDiv(dpp.endings[a]!, dynamics.conversations),
       ghostedOthers: dpp.ghostedOthers[a]!,

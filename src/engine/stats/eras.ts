@@ -106,13 +106,12 @@ export function labelEras(rates: number[], overall: number): EraKind[] {
   if (n === 0) return [];
   if (n === 1) return ['steady'];
   let hi = 0;
-  let lo = 0;
-  for (let i = 1; i < n; i++) {
-    if (rates[i]! > rates[hi]!) hi = i;
-    if (rates[i]! < rates[lo]!) lo = i;
-  }
+  for (let i = 1; i < n; i++) if (rates[i]! > rates[hi]!) hi = i;
+  // The opening chapter is "the early days", not a quiet era: pick the quietest later era.
+  let lo = -1;
+  for (let i = n >= 3 ? 1 : 0; i < n; i++) if (i !== hi && (lo < 0 || rates[i]! < rates[lo]!)) lo = i;
   kinds[hi] = 'golden';
-  if (lo !== hi && rates[lo]! <= overall * 0.75) kinds[lo] = 'quiet';
+  if (lo >= 0 && rates[lo]! <= overall * 0.75) kinds[lo] = 'quiet';
   for (let i = 0; i < n; i++) {
     if (kinds[i]) continue;
     const prev = i > 0 ? rates[i - 1]! : null;

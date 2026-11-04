@@ -148,6 +148,8 @@ export interface PersonStats {
   // Dynamics
   initiations: number;
   initiationShare: number;
+  /** Conversation starts in 8 slots: weekday morning/afternoon/evening/night, then the same for weekends. */
+  initiationSlots: number[];
   endings: number;
   endingShare: number;
   ghostedOthers: number;
