@@ -1,9 +1,10 @@
 # Left on Read
 
-**Your chats, unwrapped.** Drop in a chat export and get a story, a full dashboard, eras, awards and share cards. Think year-in-review meets data science. It works with WhatsApp chat exports, both one-on-one and groups, and **runs entirely in your browser**: nothing is uploaded, ever.
+**Your chats, unwrapped.** Drop in a chat export and get a story, a full dashboard, eras, awards, share cards and a **Wrapped** video of your year. Think year-in-review meets data science. It works with WhatsApp chat exports, both one-on-one and groups, and **runs entirely in your browser**: nothing is uploaded, ever.
 
 > Not affiliated with, endorsed by or connected to WhatsApp or Meta. "Works with WhatsApp chat exports" just describes the file format we read.
 
+- **Wrapped.** A 50-second, 1080×1920 video of any year (or any period) of your chat, with its own soundtrack: your biggest month, golden hour, who talked most, fastest replies, top emojis and words, longest streak, awards and your chat personality. Drawn, scored and encoded to MP4 on your device, ready to share to a story.
 - **Story mode.** 12 to 20 animated, swipeable slides: the first message, who talks most, reply speed, peak hours, your eras, signature words, emoji of the chat, awards and a summary card.
 - **Dashboard.** Overview, people, dynamics (initiations, response times, ghosting, double texts, effort balance), time (heatmaps, calendar, eras), words, emojis, media, mood and group dynamics. Every chart has a one-line takeaway, a table view and a text summary for screen readers.
 - **Person profiles.** A radar "fingerprint", timing heatmap, reply histogram, signature words, catchphrases and the awards each person won.
@@ -32,7 +33,7 @@ Open http://localhost:5173, then click **Try the demo** or drop in a `.txt`/`.zi
 | Command | What it does |
 |---|---|
 | `npm run dev` | Dev server with hot reload (no CSP, so HMR can use its websocket) |
-| `npm test` | 152 Vitest tests: parser, engine and i18n |
+| `npm test` | 171 Vitest tests: parser, engine, i18n and Wrapped |
 | `npm run build` | Type-check (app + service worker), SSR prerender build, then the production build into `dist/` |
 | `npm run preview` | Serve `dist/` locally, with the production CSP |
 | `npm run verify:network` | Headless end-to-end check that **nothing reaches the network** after load (see below) |
@@ -93,7 +94,7 @@ Privacy here is enforced by the browser, not just promised:
 
 - Open the site, turn on **airplane mode**, then load a chat. Everything still works.
 - Or open DevTools → **Network**, load a chat and use the app. Nothing new shows up besides `blob:`/`data:` URLs.
-- Or run `npm run build` and then `npm run verify:network`. The script starts `vite preview`, waits for the service worker, **switches the browser offline**, and then loads a `.txt` and a `.zip`, plays the story, opens every dashboard section, searches a word, changes settings, toggles anonymous mode, opens a profile, exports a share card, compares two chats and posts a file through the share target. It records every request and checks that `fetch()` is blocked by the CSP in both the page and the worker. Last run: *37 requests, all 37 answered locally by the service worker cache, 0 reached the network, no page errors.*
+- Or run `npm run build` and then `npm run verify:network`. The script starts `vite preview`, waits for the service worker, **switches the browser offline**, and then loads a `.txt` and a `.zip`, plays the story, opens every dashboard section, searches a word, changes settings, toggles anonymous mode, opens a profile, exports a share card, compares two chats, plays the Wrapped preview with sound, exports the Wrapped summary image and a full Wrapped video, and posts a file through the share target. It records every request and checks that `fetch()` is blocked by the CSP in both the page and the worker. Last run: *61 requests, all 61 answered locally by the service worker cache, 0 reached the network, no page errors; the Wrapped video came out as a 50.6-second 1080×1920 MP4.*
 
 ## Architecture
 
@@ -105,6 +106,7 @@ src/
             computeStats() aggregates them for a given Settings object.
   worker/   The Web Worker (Comlink) that owns parsed chats and runs parser + engine.
   ui/       React app: pages, story slides, dashboard, charts (ECharts), share cards.
+  ui/wrapped/  Wrapped: data, timeline, canvas scenes, soundtrack synth (worker) and encoder.
   i18n/     Typed dictionaries (English bundled, Dutch lazy-loaded), plurals, detection.
   demo/     Seeded generator for realistic duo and group chats in real export formats.
   sw.ts     Service worker: precache, offline navigation, Android share target.
@@ -119,6 +121,16 @@ Notable decisions:
 - **Columnar features** (typed arrays per message: author, day, hour, word count, flags, token ids) are computed once, so every statistic is a cheap pass over arrays.
 - **Prerendered static pages.** The landing, privacy and how-it-works pages are rendered at build time with React SSR and hydrated on the client, so they are fast and indexable. The prerender runs inside Vite's `generateBundle`, so the service worker precaches the final HTML.
 - **CSP-friendly by construction.** The only inline script, the pre-paint theme/language boot, is allowed by its SHA-256 hash. Share cards embed fonts as data URLs because the CSP forbids fetching them.
+
+## Wrapped: how the video is made
+
+Wrapped turns the statistics of one period (a calendar year by default, or the last 12 months, all time, or any custom range) into a short vertical video, entirely in the browser.
+
+- **Pictures.** Twelve scenes are drawn on a 1080×1920 canvas by plain functions of time (`src/ui/wrapped/scenes.ts`), so the live preview and the exported file are identical frame for frame. Kinetic type uses the width axis of the bundled Bricolage Grotesque for condensed headlines; scenes cut on the beat with two-layer wipes. Scenes without enough data (no emojis, a one-day chat …) are skipped.
+- **Sound.** The soundtrack is synthesised sample by sample in a Web Worker (`synth.ts`): kick, clap, hats, an offbeat bass, detuned pads and a plucked arpeggio through a ping-pong delay and a Freeverb-style reverb, with sidechain pumping and a gentle compressor. It is arranged around the scenes: the drop lands on the first statistic, the breakdown on the personality reveal and the finale on the summary. There are no audio files. A full 50-second track renders in under a second.
+- **Encoding.** [Mediabunny](https://github.com/Vanilagy/mediabunny) drives WebCodecs to encode H.264 + AAC in MP4, falling back to Opus audio where the browser has no AAC encoder (for example Chromium on Linux), and to VP9/VP8 in WebM without H.264. Frames are rendered as fast as the encoder accepts them, which is usually faster than real time. Browsers without WebCodecs fall back to `MediaRecorder` in real time. The result is shared with the Web Share API on phones, or downloaded.
+- **Privacy.** Wrapped shows counts, names, top words and emojis. It never shows message text, and a unit test checks that no message text ends up in the video's data. Anonymous mode carries over.
+- **Accessibility.** Under `prefers-reduced-motion` the preview does not autoplay and plays a calm version (fades instead of movement). Every scene is also available as text ("Read the video as text"), the canvas is labelled with the scene on screen, and the player works from the keyboard (focus the video, then space to play or pause and arrow keys to jump between scenes).
 
 ## How the statistics are defined
 
@@ -168,10 +180,12 @@ Measured on the production build, in a cloud container whose single-core speed i
 
 `npm run bench` runs the parser and engine on a generated 185,000-message chat in Node (≈1.6–2.4 s end to end on the same machine).
 
+A Wrapped video (1,519 frames, 50.6 s) takes about 60 seconds to export on the same machine, which has no hardware video encoder. Phones and laptops with hardware H.264 encoding are typically faster.
+
 ## Quality
 
-- **Tests:** 152 (67 parser, 82 engine, 3 i18n). The parser tests cover every format, date order and placeholder language; the engine tests check every statistic against hand-computed fixtures.
-- **Lighthouse** (mobile/desktop, `npm run lighthouse`): Performance 96–98 / 100, Accessibility 100, Best Practices 100, SEO 91.
+- **Tests:** 171 (67 parser, 82 engine, 3 i18n, 19 Wrapped). The parser tests cover every format, date order and placeholder language; the engine tests check every statistic against hand-computed fixtures.
+- **Lighthouse** (mobile/desktop, `npm run lighthouse`): Performance 95–97 / 100, Accessibility 100, Best Practices 100, SEO 91.
   The SEO score loses its points on one audit: Lighthouse fetches `robots.txt` *from inside the page*, and `connect-src 'none'` blocks that request. The file is there and valid; search engines fetch it directly and are not affected. Relaxing the CSP just for an audit would weaken the core privacy guarantee, so we keep it.
 - **Accessibility:** keyboard navigable (skip link, focus rings, arrow keys in the story), WCAG AA contrast in both themes, a text summary and table view for every chart, `prefers-reduced-motion` respected everywhere, and every screen is laid out for 360 px wide.
 - **Data visualisation:** a fixed-order categorical palette checked for colour-vision deficiencies, stepped separately for dark mode. People keep their colour across every chart.
@@ -182,7 +196,8 @@ Measured on the production build, in a cloud container whose single-core speed i
 - An export is a snapshot. Export the chat again to include newer messages. WhatsApp can also cap how many of the most recent messages an export contains, so very old history may be missing.
 - Sentiment uses a small English/Dutch lexicon. It is deliberately simple and transparent.
 - Very large chats (millions of messages) are limited by the memory of a browser tab.
+- Wrapped videos are 1080×1920 at 30 fps and about 25–30 MB. Some apps recompress them on upload. Emoji are drawn with the device's own emoji font, so they look slightly different on iOS, Android and Windows.
 
 ## Credits
 
-Built with Vite, React, TypeScript, Tailwind CSS, Framer Motion, Apache ECharts, JSZip, html-to-image, Comlink and Workbox. Fonts: Inter and Bricolage Grotesque (SIL Open Font License), bundled locally.
+Built with Vite, React, TypeScript, Tailwind CSS, Framer Motion, Apache ECharts, JSZip, html-to-image, Comlink, Workbox and Mediabunny (MPL-2.0). Fonts: Inter and Bricolage Grotesque (SIL Open Font License), bundled locally.

@@ -12,6 +12,7 @@ const StoryPage = lazy(() => import('./pages/StoryPage').then((m) => ({ default:
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 const PersonPage = lazy(() => import('./pages/PersonPage').then((m) => ({ default: m.PersonPage })));
 const ComparePage = lazy(() => import('./pages/ComparePage').then((m) => ({ default: m.ComparePage })));
+const WrappedPage = lazy(() => import('./wrapped/WrappedPage').then((m) => ({ default: m.WrappedPage })));
 const SettingsDrawer = lazy(() => import('./components/SettingsDrawer').then((m) => ({ default: m.SettingsDrawer })));
 
 function SkipLink() {
@@ -55,6 +56,7 @@ export function App() {
   else if (chat && route.view === 'dashboard') content = <><TopBar /><DashboardPage section={route.section} /></>;
   else if (chat && route.view === 'person' && route.personId !== null) content = <><TopBar /><PersonPage personId={route.personId} /></>;
   else if (chat && route.view === 'compare') content = <><TopBar /><ComparePage /></>;
+  else if (chat && route.view === 'wrapped') content = <><TopBar /><WrappedPage /></>;
   else content = <><TopBar transparent /><Landing /></>;
 
   return (

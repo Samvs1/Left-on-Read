@@ -3,7 +3,8 @@
  *  1. Load the app and wait for the service worker to take control.
  *  2. Go offline and record every request from that point on.
  *  3. Analyse a .txt and a .zip export, play the story, open every view,
- *     search, change settings, toggle anonymous mode, export a share card.
+ *     search, change settings, toggle anonymous mode, export a share card,
+ *     play the Wrapped preview with sound and export the Wrapped video.
  *  4. Assert: zero requests reached the network, and the CSP blocks fetch()
  *     in the page and in blob workers.
  * Usage: npm run build && npm run verify:network
@@ -134,7 +135,30 @@ async function waitForServer() {
     await page.waitForTimeout(1500);
     check(true, '.zip export analysed in compare mode');
 
-    // 3) Android share target: the OS POSTs the export to /share-target; the
+    // 3) Wrapped: live preview with sound (synthesised in a worker), the
+    //    summary image and a full video export, all offline.
+    await page.evaluate(() => { location.hash = '#/wrapped'; });
+    await page.waitForSelector('canvas[role=img]', { timeout: 30000 });
+    await page.click('button[aria-label="Turn sound on"]');
+    await page.waitForSelector('button[aria-label="Turn sound off"]', { timeout: 20000 });
+    await page.waitForTimeout(1500);
+    const [still] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('text=Download summary image')]);
+    const stillPath = path.join(tmp, 'wrapped.png');
+    await still.saveAs(stillPath);
+    const sp = fs.readFileSync(stillPath);
+    check(sp.readUInt32BE(16) === 1080 && sp.readUInt32BE(20) === 1920, `Wrapped summary image exported offline as ${sp.readUInt32BE(16)}×${sp.readUInt32BE(20)} PNG`);
+    const t0 = Date.now();
+    await page.click('text=Create video');
+    await page.waitForSelector('video', { timeout: 600000 });
+    const vid = await page.evaluate(async () => {
+      const v = document.querySelector('video');
+      if (v.readyState < 1) await new Promise((r) => v.addEventListener('loadedmetadata', r, { once: true }));
+      return { d: v.duration, w: v.videoWidth, h: v.videoHeight };
+    });
+    const label = ((await page.locator('p.text-xs').first().textContent()) || '').trim();
+    check(vid.w === 1080 && vid.h === 1920 && vid.d > 10, `Wrapped video created offline in ${((Date.now() - t0) / 1000).toFixed(0)} s: ${label}, ${vid.d.toFixed(1)} s long`);
+
+    // 4) Android share target: the OS POSTs the export to /share-target; the
     //    service worker stores it locally and redirects into the app.
     await page.evaluate(() => { location.hash = ''; });
     await page.evaluate(() => {

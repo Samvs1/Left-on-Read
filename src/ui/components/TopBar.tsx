@@ -31,6 +31,9 @@ export function TopBar({ transparent = false }: { transparent?: boolean }) {
               <button type="button" className="btn btn-sm" onClick={() => go('story')}>
                 {t('nav.story')}
               </button>
+              <button type="button" className={`btn btn-sm ${route.view === 'wrapped' ? 'bg-surface-2' : ''}`} onClick={() => go('wrapped')}>
+                {t('wrapped.name')}
+              </button>
             </div>
           )}
           {computing && inApp && (

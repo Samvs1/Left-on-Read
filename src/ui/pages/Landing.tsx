@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { useT, type TKey } from '../../i18n';
 import { DropZone, GlobalDrop, useFilePicker } from '../components/DropZone';
 import { ExportGuide } from '../components/ExportGuide';
+import { fmtNum } from '../format';
 import { Icon, type IconName } from '../components/Icon';
 import { go, href } from '../router';
 import { loadDemo, setState, useStore, warmup } from '../store';
@@ -214,6 +215,35 @@ export function Landing() {
                 <p className="mt-1.5 text-[0.95rem] leading-snug text-ink-2">{t(body)}</p>
               </div>
             ))}
+          </div>
+          <div className="relative mt-4 overflow-hidden rounded-[2rem] bg-[#0e0b1a] p-7 text-white ring-1 ring-white/10 sm:p-10">
+            <div className="blob right-[-8%] top-[-40%] h-80 w-80 opacity-80" style={{ ['--blob' as string]: 'rgba(124,92,255,0.45)' }} aria-hidden="true" />
+            <div className="relative grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-1.5 rounded-full bg-[#c8ff2e] px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#14102a]">
+                  <Icon name="film" size={14} />
+                  {t('wrapped.name')}
+                </p>
+                <h3 className="mt-4 text-[2.1rem] font-[800] leading-[1] sm:text-[2.8rem]">{t('landing.wrappedTitle')}</h3>
+                <p className="mt-3 max-w-xl text-lg leading-relaxed text-white/75">{t('landing.wrappedBody')}</p>
+              </div>
+              <div className="flex justify-center md:justify-end" aria-hidden="true">
+                <div className="relative z-0 flex">
+                  <div className="h-40 w-[5.6rem] -rotate-6 rounded-2xl bg-[#2b1a9e] p-2.5 shadow-xl">
+                    <p className="font-display text-[1.35rem] font-[800] leading-none text-[#c8ff2e]">{fmtNum(18402)}</p>
+                    <p className="mt-1 text-[0.6rem] font-semibold text-white/80">{t('wrapped.msgWord')}</p>
+                  </div>
+                  <div className="relative z-10 -ml-4 mt-3 flex h-40 w-[5.6rem] items-end gap-[3px] rounded-2xl bg-[#c8ff2e] p-2.5 shadow-xl">
+                    {[35, 55, 40, 80, 62, 46].map((h, i) => (
+                      <span key={i} className={`flex-1 rounded-t-[3px] ${i === 3 ? 'bg-[#5b3df5]' : 'bg-[#14102a]/20'}`} style={{ height: `${h}%` }} />
+                    ))}
+                  </div>
+                  <div className="-ml-4 grid h-40 w-[5.6rem] rotate-6 place-items-center rounded-2xl bg-[#ff8fd2] shadow-xl">
+                    <span className="emoji text-[2.6rem]">😂</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 

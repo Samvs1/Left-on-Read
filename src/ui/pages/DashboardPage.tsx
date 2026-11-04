@@ -12,11 +12,13 @@ import { Icon } from '../components/Icon';
 import { useNamer } from '../names';
 import { go } from '../router';
 import { fmtDateRange, fmtDateShort, fmtNum } from '../format';
+import { useWrappedLabel, WRAPPED_BUTTON } from '../wrapped/cta';
 import { Footer } from '../components/Footer';
 
 const SECTIONS = ['overview', 'people', 'dynamics', 'time', 'eras', 'words', 'emojis', 'media', 'mood', 'group', 'awards'] as const;
 
 export function DashboardPage({ section }: { section?: string | null }) {
+  const wrappedLabel = useWrappedLabel();
   const t = useT();
   const chat = useStore((s) => s.chat)!;
   const settings = useStore((s) => s.settings);
@@ -79,6 +81,10 @@ export function DashboardPage({ section }: { section?: string | null }) {
             {stats && stats.meta.excludedMessages > 0 && !filtered && <span>{t('dash.excluded', { n: fmtNum(stats.meta.excludedMessages) })}</span>}
           </div>
           <div className="mt-6 flex flex-wrap gap-2">
+            <button type="button" className={WRAPPED_BUTTON} onClick={() => go('wrapped')}>
+              <Icon name="film" size={16} />
+              {wrappedLabel}
+            </button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => go('story')}>
               <Icon name="play" size={14} />
               {t('dash.replayStory')}

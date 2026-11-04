@@ -65,6 +65,8 @@ export const fmtDayMonth = (ts: number) => df('dayMonth', { day: 'numeric', mont
 export const fmtWeekdayDate = (ts: number) => df('wdate', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(ts);
 export const fmtMonth = (ts: number) => df('month', { month: 'long', year: 'numeric' }).format(ts);
 export const fmtMonthShort = (ts: number) => df('monthShort', { month: 'short', year: '2-digit' }).format(ts);
+export const fmtMonthName = (ts: number) => df('monthName', { month: 'long' }).format(ts);
+export const fmtMonthNarrow = (ts: number) => df('monthNarrow', { month: 'narrow' }).format(ts);
 export const fmtTime = (ts: number) => df('time', { hour: '2-digit', minute: '2-digit' }).format(ts);
 export const fmtDateTime = (ts: number) => df('dt', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ts);
 

@@ -9,6 +9,7 @@ import { rankedAwards } from '../awards';
 import { Icon } from '../components/Icon';
 import { ShareButton } from '../components/ShareButton';
 import { prefersReducedMotion } from '../theme';
+import { useWrappedLabel, WRAPPED_BUTTON } from '../wrapped/cta';
 
 const ROMAN = ['', '', ' II', ' III', ' IV', ' V', ' VI'];
 
@@ -27,6 +28,7 @@ export function SlideStill({ slide, ctx }: { slide: SlideDef; ctx: SlideCtx }) {
 }
 
 export function StoryPage() {
+  const wrappedLabel = useWrappedLabel();
   const t = useT();
   const chat = useStore((s) => s.chat)!;
   const anonymous = useStore((s) => s.anonymize);
@@ -217,9 +219,15 @@ export function StoryPage() {
             <Icon name="chevronLeft" />
           </button>
           {slide.id === 'summary' ? (
-            <div className="flex flex-wrap justify-center gap-2">
-              <button type="button" className="btn btn-sm bg-white text-[#16141d] hover:bg-white/90" onClick={close}>
-                {t('story.toDashboard')}
+            <div className="flex min-w-0 justify-center gap-2">
+              <button type="button" className={`${WRAPPED_BUTTON} whitespace-nowrap`} onClick={() => go('wrapped')} aria-label={wrappedLabel}>
+                <Icon name="film" size={16} />
+                <span className="sm:hidden">{t('wrapped.name')}</span>
+                <span className="hidden sm:inline">{wrappedLabel}</span>
+              </button>
+              <button type="button" className="btn btn-sm whitespace-nowrap bg-white text-[#16141d] hover:bg-white/90" onClick={close} aria-label={t('story.toDashboard')}>
+                <span className="sm:hidden">{t('nav.dashboard')}</span>
+                <span className="hidden sm:inline">{t('story.toDashboard')}</span>
                 <Icon name="arrowRight" size={16} />
               </button>
             </div>

@@ -7,7 +7,7 @@
 import { useSyncExternalStore } from 'react';
 
 export type Page = 'home' | 'privacy' | 'how';
-export type View = 'home' | 'story' | 'dashboard' | 'person' | 'compare';
+export type View = 'home' | 'story' | 'dashboard' | 'person' | 'compare' | 'wrapped';
 
 export interface Route {
   page: Page;
@@ -33,6 +33,7 @@ export function parseRoute(pathname: string, hash: string): Route {
   if (view === 'dashboard') return { page, view: 'dashboard', section: arg || null, personId: null };
   if (view === 'person' && arg !== undefined && /^\d+$/.test(arg)) return { page, view: 'person', section: null, personId: Number(arg) };
   if (view === 'compare') return { page, view: 'compare', section: null, personId: null };
+  if (view === 'wrapped') return { page, view: 'wrapped', section: null, personId: null };
   return { page, view: 'home', section: null, personId: null };
 }
 

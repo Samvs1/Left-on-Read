@@ -105,6 +105,9 @@ export function warmup(): Promise<unknown> {
     import('./pages/DashboardPage'),
     import('./pages/PersonPage'),
     import('./pages/ComparePage'),
+    import('./wrapped/WrappedPage'),
+    import('./wrapped/encode'),
+    import('./wrapped/fonts').then((m) => m.loadWrappedFonts()),
     import('./lib/echarts').then((m) => m.loadECharts()),
     import('./lib/share'),
   ]);

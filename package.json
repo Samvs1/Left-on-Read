@@ -31,6 +31,7 @@
     "framer-motion": "^12.43.0",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.2",
+    "mediabunny": "^1.65.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "workbox-precaching": "^7.4.1",
