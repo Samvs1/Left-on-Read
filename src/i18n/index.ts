@@ -4,7 +4,6 @@
  */
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
-import { nl } from './nl';
 
 export type Lang = 'en' | 'nl';
 export type Dict = typeof en;
@@ -15,7 +14,13 @@ type Paths<T, P extends string = ''> = {
 export type TKey = Paths<Dict>;
 export type TParams = Record<string, string | number>;
 
-const DICTS: Record<Lang, Dict> = { en, nl };
+/** English ships in the main bundle; Dutch is loaded on demand. */
+const DICTS: Partial<Record<Lang, Dict>> = { en };
+
+export async function ensureLang(lang: Lang): Promise<void> {
+  if (DICTS[lang]) return;
+  if (lang === 'nl') DICTS.nl = (await import('./nl')).nl;
+}
 const LOCALES: Record<Lang, string> = { en: 'en-GB', nl: 'nl-NL' };
 
 let current: Lang = 'en';
@@ -44,6 +49,11 @@ export function getLang(): Lang {
 
 export function setLang(lang: Lang, persist = true): void {
   if (lang === current) return;
+  if (!DICTS[lang]) {
+    // Load the dictionary first, then switch (no flash of untranslated keys).
+    void ensureLang(lang).then(() => setLang(lang, persist));
+    return;
+  }
   current = lang;
   if (persist) {
     try {
@@ -81,7 +91,7 @@ function plural(lang: Lang, n: number): Intl.LDMLPluralRule {
 }
 
 export function translate(lang: Lang, key: TKey | string, params?: TParams): string {
-  let s = lookup(DICTS[lang], key) ?? lookup(en, key) ?? key;
+  let s = lookup(DICTS[lang] ?? en, key) ?? lookup(en, key) ?? key;
   if (s.includes('|')) {
     const forms = s.split('|');
     const n = Number(params?.['n'] ?? params?.['count'] ?? 0);
@@ -112,5 +122,5 @@ export function useT(): (key: TKey, params?: TParams) => string {
 
 /** Raw dictionary access for lists (e.g. rotating loading messages). */
 export function dict(lang: Lang = current): Dict {
-  return DICTS[lang];
+  return DICTS[lang] ?? en;
 }

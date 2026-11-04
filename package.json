@@ -6,15 +6,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build && vite build --ssr src/ui/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
-    "build:fast": "vite build && vite build --ssr src/ui/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
+    "build": "npm run typecheck && npm run build:ssr && vite build && node -e \"require('fs').rmSync('dist-ssr',{recursive:true,force:true})\"",
+    "build:fast": "npm run build:ssr && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.sw.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "rolldown scripts/bench.ts --format esm --platform node --file node_modules/.cache/bench.mjs --log-level silent && node node_modules/.cache/bench.mjs",
-    "verify:network": "node scripts/verify-no-network.mjs",
-    "lighthouse": "node scripts/lighthouse.mjs"
+    "verify:network": "node scripts/verify-no-network.cjs",
+    "lighthouse": "node scripts/lighthouse.cjs",
+    "build:ssr": "vite build --ssr src/ui/entry-server.tsx --outDir dist-ssr",
+    "deploy:gh-pages": "BASE_PATH=/Left-on-Read/ npm run build && gh-pages -d dist --dotfiles",
+    "deploy:netlify": "npm run build && npx netlify-cli deploy --prod --dir=dist",
+    "assets": "node scripts/generate-assets.cjs"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -40,6 +44,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
+    "gh-pages": "^6.3.0",
     "tailwindcss": "^4.3.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",

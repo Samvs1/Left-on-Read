@@ -21,8 +21,8 @@ export function LoadingScreen() {
   const pct = Math.round((a + (b - a) * (progress?.fraction ?? 0)) * 100);
   return (
     <main id="main" className="grain relative grid min-h-[calc(100dvh-4rem)] place-items-center overflow-hidden px-4">
-      <div className="blob animate-float-a left-[10%] top-[10%] h-80 w-80" style={{ background: 'var(--glow-a)' }} aria-hidden="true" />
-      <div className="blob animate-float-b bottom-[5%] right-[10%] h-72 w-72" style={{ background: 'var(--glow-b)' }} aria-hidden="true" />
+      <div className="blob animate-float-a left-[10%] top-[10%] h-80 w-80" style={{ ['--blob' as string]: 'var(--glow-a)' }} aria-hidden="true" />
+      <div className="blob animate-float-b bottom-[5%] right-[10%] h-72 w-72" style={{ ['--blob' as string]: 'var(--glow-b)' }} aria-hidden="true" />
       <div className="relative w-full max-w-md text-center">
         <div className="mx-auto mb-8 w-fit animate-[float-a_4s_ease-in-out_infinite]">
           <LogoMark size={84} />

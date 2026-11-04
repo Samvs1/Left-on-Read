@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { useT, type TKey } from '../../i18n';
 import { DropZone, GlobalDrop, useFilePicker } from '../components/DropZone';
 import { ExportGuide } from '../components/ExportGuide';
@@ -65,7 +66,7 @@ function HeroMock() {
         </div>
       </div>
       {/* reply time pill */}
-      <div className="glass absolute right-[0%] top-[52%] flex items-center gap-2 rounded-full px-3.5 py-2 shadow-lg animate-float-b" style={{ animationDelay: '-4s' }}>
+      <div className="absolute right-[0%] top-[52%] flex items-center gap-2 rounded-full border border-line bg-surface/90 px-3.5 py-2 shadow-lg animate-float-b" style={{ animationDelay: '-4s' }}>
         <span className="grid h-7 w-7 place-items-center rounded-full bg-[#1baf7a] text-white">
           <Icon name="zap" size={14} />
         </span>
@@ -100,12 +101,12 @@ export function Landing() {
       <main id="main" onPointerDown={() => void warmup()} onKeyDown={() => void warmup()}>
         {/* ---------------- Hero ---------------- */}
         <section className="grain relative overflow-hidden">
-          <div className="blob animate-float-a left-[-10%] top-[-12%] h-[26rem] w-[26rem]" style={{ background: 'var(--glow-a)' }} aria-hidden="true" />
-          <div className="blob animate-float-b right-[-8%] top-[18%] h-[22rem] w-[22rem]" style={{ background: 'var(--glow-b)' }} aria-hidden="true" />
-          <div className="blob animate-float-a bottom-[-10%] left-[30%] h-[18rem] w-[18rem]" style={{ background: 'var(--glow-c)' }} aria-hidden="true" />
+          <div className="blob animate-float-a left-[-10%] top-[-12%] h-[26rem] w-[26rem]" style={{ ['--blob' as string]: 'var(--glow-a)' }} aria-hidden="true" />
+          <div className="blob animate-float-b right-[-8%] top-[18%] h-[22rem] w-[22rem]" style={{ ['--blob' as string]: 'var(--glow-b)' }} aria-hidden="true" />
+          <div className="blob animate-float-a bottom-[-10%] left-[30%] h-[18rem] w-[18rem]" style={{ ['--blob' as string]: 'var(--glow-c)' }} aria-hidden="true" />
           <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pb-16 pt-8 sm:px-6 sm:pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:pb-24">
             <div className="min-w-0">
-              <p className="chip mb-5 max-w-full !whitespace-normal !bg-surface/70 text-left backdrop-blur">
+              <p className="chip mb-5 max-w-full !whitespace-normal !bg-surface/80 text-left">
                 <Icon name="lock" size={14} />
                 {t('landing.eyebrow')}
               </p>
@@ -155,10 +156,13 @@ export function Landing() {
           </div>
         </section>
 
+        {/* Below the fold: separate Suspense boundaries let React hydrate these
+            in smaller chunks after the hero, keeping the main thread responsive. */}
+        <Suspense fallback={null}>
         {/* ---------------- Privacy promise ---------------- */}
-        <section className="px-4 sm:px-6" aria-labelledby="privacy-title">
+        <section className="cv-auto px-4 sm:px-6" aria-labelledby="privacy-title">
           <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] bg-[#121019] p-7 text-white ring-1 ring-white/10 sm:p-12">
-            <div className="blob left-[-6%] top-[-30%] h-72 w-72 opacity-70" style={{ background: 'rgba(124,92,255,0.45)' }} aria-hidden="true" />
+            <div className="blob left-[-6%] top-[-30%] h-72 w-72 opacity-70" style={{ ['--blob' as string]: 'rgba(124,92,255,0.45)' }} aria-hidden="true" />
             <div className="relative grid gap-10 lg:grid-cols-2">
               <div>
                 <p className="eyebrow !text-white/60">{t('nav.privacy')}</p>
@@ -195,8 +199,10 @@ export function Landing() {
           </div>
         </section>
 
+        </Suspense>
+        <Suspense fallback={null}>
         {/* ---------------- Features ---------------- */}
-        <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6" aria-labelledby="features-title">
+        <section className="cv-auto mx-auto max-w-6xl px-4 py-20 sm:px-6" aria-labelledby="features-title">
           <h2 id="features-title" className="max-w-2xl text-[2.3rem] font-[780] leading-[1] sm:text-[3.2rem]">
             {t('landing.featuresTitle')}
           </h2>
@@ -213,8 +219,10 @@ export function Landing() {
           </div>
         </section>
 
+        </Suspense>
+        <Suspense fallback={null}>
         {/* ---------------- Export guide ---------------- */}
-        <section id="export" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6" aria-labelledby="export-title">
+        <section id="export" className="cv-auto mx-auto max-w-6xl px-4 pb-20 sm:px-6" aria-labelledby="export-title">
           <div className="mb-8 text-center">
             <h2 id="export-title" className="text-[2.3rem] font-[780] leading-[1] sm:text-[3rem]">
               {t('landing.exportTitle')}
@@ -224,8 +232,10 @@ export function Landing() {
           <ExportGuide />
         </section>
 
+        </Suspense>
+        <Suspense fallback={null}>
         {/* ---------------- FAQ ---------------- */}
-        <section className="mx-auto max-w-3xl px-4 pb-24 sm:px-6" aria-labelledby="faq-title">
+        <section className="cv-auto mx-auto max-w-3xl px-4 pb-24 sm:px-6" aria-labelledby="faq-title">
           <h2 id="faq-title" className="mb-6 text-[2rem] font-[780] leading-none sm:text-[2.6rem]">
             {t('landing.faqTitle')}
           </h2>
@@ -248,8 +258,11 @@ export function Landing() {
             ))}
           </div>
         </section>
+        </Suspense>
       </main>
-      <Footer />
+      <Suspense fallback={null}>
+        <Footer />
+      </Suspense>
     </>
   );
 }

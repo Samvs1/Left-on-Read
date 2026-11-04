@@ -298,6 +298,11 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  /* Skip style/layout/paint for off-screen landing sections until needed. */
+  .cv-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 900px;
+  }
   .sr-only {
     position: absolute;
     width: 1px;
@@ -320,19 +325,19 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.05;
-    mix-blend-mode: multiply;
+    opacity: 0.035;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
   .dark .grain::after {
-    mix-blend-mode: screen;
-    opacity: 0.04;
+    opacity: 0.025;
   }
+  /* Soft glow without a blur filter: a radial gradient is far cheaper to paint. */
   .blob {
     position: absolute;
     border-radius: 999px;
-    filter: blur(60px);
     pointer-events: none;
+    background: radial-gradient(closest-side, var(--blob, rgb(124 92 255 / 0.35)), transparent);
+    will-change: transform;
   }
   .range {
     -webkit-appearance: none;
